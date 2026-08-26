@@ -12,6 +12,7 @@ import {
   type CategoryType,
   type TransactionPagination,
 } from "../../../lib/api";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 
 const TYPE_SHORT: Record<CategoryType, string> = {
   INCOME: "Inc",
@@ -82,6 +83,7 @@ export default function TransactionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const [month, setMonth] = useState(currentMonth());
   const [typeFilter, setTypeFilter] = useState<CategoryType | "">("");
@@ -125,7 +127,6 @@ export default function TransactionsPage() {
 
   async function handleDelete(id: string) {
     if (!accessToken) return;
-    if (!confirm("Are you sure you want to delete this transaction?")) return;
     setDeletingId(id);
     try {
       await deleteTransaction(id, accessToken);
@@ -133,6 +134,7 @@ export default function TransactionsPage() {
       if (pagination) {
         setPagination({ ...pagination, total: pagination.total - 1 });
       }
+      setPendingDeleteId(null);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to delete transaction");
     } finally {
@@ -221,24 +223,29 @@ export default function TransactionsPage() {
                 key={tx.id}
                 className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900"
               >
-                <div
-                  className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-lg ${typeIconClass(tx.type)}`}
+                <Link
+                  href={`/transactions/${tx.id}`}
+                  className="flex min-w-0 flex-1 items-center gap-3"
                 >
-                  {typeIcon(tx.type)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50 truncate">
-                    {tx.category.name}
-                  </p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                    {formatDate(tx.date)}{tx.note ? ` · ${tx.note}` : ""}
-                  </p>
-                </div>
-                <span
-                  className={`text-sm font-semibold tabular-nums ${typeAmountClass(tx.type)}`}
-                >
-                  {formatAmount(tx.amount, tx.type)}
-                </span>
+                  <div
+                    className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-lg ${typeIconClass(tx.type)}`}
+                  >
+                    {typeIcon(tx.type)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50 truncate">
+                      {tx.category.name}
+                    </p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                      {formatDate(tx.date)}{tx.note ? ` · ${tx.note}` : ""}
+                    </p>
+                  </div>
+                  <span
+                    className={`text-sm font-semibold tabular-nums ${typeAmountClass(tx.type)}`}
+                  >
+                    {formatAmount(tx.amount, tx.type)}
+                  </span>
+                </Link>
                 <div className="flex items-center gap-2 ml-1">
                   <Link
                     href={`/transactions/${tx.id}/edit`}
@@ -251,7 +258,7 @@ export default function TransactionsPage() {
                   </Link>
                   <button
                     type="button"
-                    onClick={() => void handleDelete(tx.id)}
+                    onClick={() => setPendingDeleteId(tx.id)}
                     disabled={deletingId === tx.id}
                     className="text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-40"
                     title="Delete"
@@ -295,6 +302,20 @@ export default function TransactionsPage() {
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="Delete transaction"
+        message="This transaction will be permanently deleted. This cannot be undone."
+        confirmLabel="Delete"
+        isConfirming={deletingId !== null}
+        onConfirm={() => {
+          if (pendingDeleteId) void handleDelete(pendingDeleteId);
+        }}
+        onCancel={() => {
+          if (deletingId === null) setPendingDeleteId(null);
+        }}
+      />
     </div>
   );
 }

@@ -6,11 +6,13 @@ import {
   listCategories,
   createTransaction,
   updateTransaction,
+  deleteTransaction,
   type Category,
   type CategoryType,
   type Transaction,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import ConfirmDialog from "./ConfirmDialog";
 
 function toLocalDatetimeValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -43,6 +45,8 @@ export default function TransactionForm({ transaction }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingCats, setIsLoadingCats] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,8 +66,8 @@ export default function TransactionForm({ transaction }: Props) {
 
   const filteredCategories = categories.filter((c) => c.type === type);
 
-  // Reset category when type changes (only in create mode)
-  const categoryIdForType = !transaction && filteredCategories.every((c) => c.id !== categoryId) ? "" : categoryId;
+  // Clear category when it does not belong to the selected type (create and edit)
+  const categoryIdForType = filteredCategories.some((c) => c.id === categoryId) ? categoryId : "";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -103,6 +107,21 @@ export default function TransactionForm({ transaction }: Props) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!accessToken || !transaction) return;
+    setIsDeleting(true);
+    setError(null);
+    try {
+      await deleteTransaction(transaction.id, accessToken);
+      router.push("/transactions");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete transaction");
+      setIsDeleting(false);
+      setConfirmOpen(false);
     }
   }
 
@@ -236,12 +255,35 @@ export default function TransactionForm({ transaction }: Props) {
         </button>
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isDeleting}
           className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60"
         >
           {isSubmitting ? "Saving…" : transaction ? "Update" : "Add Transaction"}
         </button>
       </div>
+
+      {transaction ? (
+        <button
+          type="button"
+          onClick={() => setConfirmOpen(true)}
+          disabled={isDeleting || isSubmitting}
+          className="w-full rounded-lg border border-red-300 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-60 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40"
+        >
+          {isDeleting ? "Deleting…" : "Delete transaction"}
+        </button>
+      ) : null}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Delete transaction"
+        message="This transaction will be permanently deleted. This cannot be undone."
+        confirmLabel="Delete"
+        isConfirming={isDeleting}
+        onConfirm={() => void handleDelete()}
+        onCancel={() => {
+          if (!isDeleting) setConfirmOpen(false);
+        }}
+      />
     </form>
   );
 }
