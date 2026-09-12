@@ -31,7 +31,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       <Sidebar />
       <div className="md:pl-64">
-        <main className="min-h-screen pb-20 md:pb-0">{children}</main>
+        <main className="min-h-screen pb-20 md:pb-0 [&>*]:mx-auto">{children}</main>
       </div>
       <BottomNav />
     </div>

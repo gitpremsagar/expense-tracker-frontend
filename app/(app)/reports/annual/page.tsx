@@ -66,7 +66,7 @@ export default function AnnualReportPage() {
     })) ?? [];
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-4xl">
+    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-4">
         <ReportViewToggle />
       </div>
@@ -157,7 +157,11 @@ export default function AnnualReportPage() {
             </div>
           )}
 
-          <CategoryBreakdownGrid items={report.categoryBreakdown} period={{ kind: "year", year }} />
+          <CategoryBreakdownGrid
+            items={report.categoryBreakdown}
+            period={{ kind: "year", year }}
+            onTransactionCreated={() => void fetchReport()}
+          />
         </div>
       ) : null}
     </div>

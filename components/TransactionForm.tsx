@@ -28,18 +28,30 @@ const TYPE_LABEL: Record<CategoryType, string> = {
 
 type Props = {
   transaction?: Transaction;
+  defaultType?: CategoryType;
+  defaultDate?: Date;
+  onSuccess?: () => void;
+  onCancel?: () => void;
 };
 
-export default function TransactionForm({ transaction }: Props) {
+export default function TransactionForm({
+  transaction,
+  defaultType,
+  defaultDate,
+  onSuccess,
+  onCancel,
+}: Props) {
   const { accessToken } = useAuth();
   const router = useRouter();
 
-  const [type, setType] = useState<CategoryType>(transaction?.type ?? "EXPENSE");
+  const [type, setType] = useState<CategoryType>(transaction?.type ?? defaultType ?? "EXPENSE");
   const [amount, setAmount] = useState(transaction ? String(transaction.amount) : "");
   const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? "");
   const [note, setNote] = useState(transaction?.note ?? "");
   const [date, setDate] = useState(
-    transaction ? toLocalDatetimeValue(new Date(transaction.date)) : toLocalDatetimeValue(new Date()),
+    transaction
+      ? toLocalDatetimeValue(new Date(transaction.date))
+      : toLocalDatetimeValue(defaultDate ?? new Date()),
   );
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -101,8 +113,12 @@ export default function TransactionForm({ transaction }: Props) {
           accessToken,
         );
       }
-      router.push("/transactions");
-      router.refresh();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        router.push("/transactions");
+        router.refresh();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -248,7 +264,7 @@ export default function TransactionForm({ transaction }: Props) {
       <div className="flex gap-3 pt-2">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={() => (onCancel ? onCancel() : router.back())}
           className="flex-1 rounded-lg border border-zinc-300 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
         >
           Cancel

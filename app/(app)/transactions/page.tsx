@@ -143,7 +143,7 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-4xl">
+    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">Transactions</h1>
