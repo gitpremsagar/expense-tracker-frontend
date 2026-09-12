@@ -241,6 +241,7 @@ export type ListTransactionsResult = {
 
 export type ListTransactionsParams = {
   month?: string;
+  year?: number;
   type?: CategoryType;
   categoryId?: string;
   page?: number;
@@ -265,6 +266,7 @@ export async function listTransactions(
 ): Promise<ListTransactionsResult> {
   const qs = new URLSearchParams();
   if (params.month) qs.set("month", params.month);
+  if (params.year) qs.set("year", String(params.year));
   if (params.type) qs.set("type", params.type);
   if (params.categoryId) qs.set("categoryId", params.categoryId);
   if (params.page) qs.set("page", String(params.page));
@@ -335,6 +337,33 @@ export type MonthlyReport = {
 
 export async function getMonthlyReport(month: string, accessToken: string): Promise<MonthlyReport> {
   const res = await apiFetch<{ report: MonthlyReport }>(`/reports/monthly?month=${month}`, {
+    method: "GET",
+    accessToken,
+  });
+  return res.report;
+}
+
+export type MonthlyTotalItem = {
+  month: string;
+  income: number;
+  expense: number;
+  saving: number;
+  investment: number;
+};
+
+export type AnnualReport = {
+  year: number;
+  totalIncome: number;
+  totalExpense: number;
+  totalSaving: number;
+  totalInvestment: number;
+  netBalance: number;
+  categoryBreakdown: CategoryBreakdownItem[];
+  monthlyTotals: MonthlyTotalItem[];
+};
+
+export async function getAnnualReport(year: number, accessToken: string): Promise<AnnualReport> {
+  const res = await apiFetch<{ report: AnnualReport }>(`/reports/annual?year=${year}`, {
     method: "GET",
     accessToken,
   });

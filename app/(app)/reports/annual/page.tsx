@@ -11,53 +11,39 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { useAuth } from "../../../lib/auth-context";
-import { getMonthlyReport, type MonthlyReport } from "../../../lib/api";
+import { useAuth } from "../../../../lib/auth-context";
+import { getAnnualReport, type AnnualReport } from "../../../../lib/api";
 import {
   CategoryBreakdownGrid,
   ReportSummaryCards,
   ReportViewToggle,
   formatCurrency,
-} from "../../../components/ReportWidgets";
+} from "../../../../components/ReportWidgets";
 
-function currentMonth() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function currentYear() {
+  return new Date().getFullYear();
 }
 
-function monthLabel(month: string) {
-  const [year, mon] = month.split("-");
-  return new Date(parseInt(year!), parseInt(mon!) - 1, 1).toLocaleString("en-IN", {
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function navigateMonth(month: string, delta: number): string {
-  const [year, mon] = month.split("-").map(Number);
-  const d = new Date(year!, mon! - 1, 1);
-  d.setMonth(d.getMonth() + delta);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-export default function ReportsPage() {
+export default function AnnualReportPage() {
   const { accessToken } = useAuth();
-  const [month, setMonth] = useState(currentMonth());
-  const [report, setReport] = useState<MonthlyReport | null>(null);
+  const [year, setYear] = useState(currentYear());
+  const [report, setReport] = useState<AnnualReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchReport = useCallback(async () => {
     if (!accessToken) return;
     try {
-      const data = await getMonthlyReport(month, accessToken);
+      const data = await getAnnualReport(year, accessToken);
       setReport(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load report");
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, month]);
+  }, [accessToken, year]);
 
   useEffect(() => {
     void (async () => {
@@ -67,13 +53,16 @@ export default function ReportsPage() {
     })();
   }, [fetchReport]);
 
+  const hasActivity =
+    report?.monthlyTotals.some((m) => m.income + m.expense + m.saving + m.investment > 0) ?? false;
+
   const chartData =
-    report?.dailyTotals.map((d) => ({
-      date: d.date.slice(8),
-      Income: d.income,
-      Expense: d.expense,
-      Saving: d.saving,
-      Investment: d.investment,
+    report?.monthlyTotals.map((m) => ({
+      month: MONTH_LABELS[parseInt(m.month.slice(5), 10) - 1] ?? m.month,
+      Income: m.income,
+      Expense: m.expense,
+      Saving: m.saving,
+      Investment: m.investment,
     })) ?? [];
 
   return (
@@ -85,30 +74,35 @@ export default function ReportsPage() {
       <div className="flex items-center gap-3 mb-6">
         <button
           type="button"
-          onClick={() => setMonth((m) => navigateMonth(m, -1))}
+          onClick={() => setYear((y) => y - 1)}
           className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-300 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
-          title="Previous month"
+          title="Previous year"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{monthLabel(month)}</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Monthly Report</p>
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{year}</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">Annual Report</p>
         </div>
         <input
-          type="month"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 outline-none ring-emerald-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          type="number"
+          min={1970}
+          max={currentYear()}
+          value={year}
+          onChange={(e) => {
+            const next = parseInt(e.target.value, 10);
+            if (!Number.isNaN(next)) setYear(Math.min(next, currentYear()));
+          }}
+          className="w-24 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 outline-none ring-emerald-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
         />
         <button
           type="button"
-          onClick={() => setMonth((m) => navigateMonth(m, 1))}
-          disabled={month >= currentMonth()}
+          onClick={() => setYear((y) => y + 1)}
+          disabled={year >= currentYear()}
           className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-300 text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
-          title="Next month"
+          title="Next year"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -137,13 +131,13 @@ export default function ReportsPage() {
             netBalance={report.netBalance}
           />
 
-          {chartData.length > 0 ? (
+          {hasActivity ? (
             <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-              <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-4">Daily Trend</h2>
+              <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-4">Monthly Trend</h2>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} width={50} tickFormatter={(v) => `₹${v}`} />
                   <Tooltip
                     formatter={(value) => [typeof value === "number" ? formatCurrency(value) : String(value), ""]}
@@ -159,11 +153,11 @@ export default function ReportsPage() {
             </div>
           ) : (
             <div className="rounded-2xl border-2 border-dashed border-zinc-200 dark:border-zinc-800 p-10 text-center">
-              <p className="text-sm text-zinc-400 dark:text-zinc-500">No transaction data for this month.</p>
+              <p className="text-sm text-zinc-400 dark:text-zinc-500">No transaction data for this year.</p>
             </div>
           )}
 
-          <CategoryBreakdownGrid items={report.categoryBreakdown} period={{ kind: "month", month }} />
+          <CategoryBreakdownGrid items={report.categoryBreakdown} period={{ kind: "year", year }} />
         </div>
       ) : null}
     </div>

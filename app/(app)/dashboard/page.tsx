@@ -234,11 +234,12 @@ export default function DashboardPage() {
       )}
 
       {/* Quick links */}
-      <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {[
           { href: "/transactions/new", label: "Add Transaction", emoji: "+" },
           { href: "/categories", label: "Categories", emoji: "🏷" },
           { href: "/reports", label: "Monthly Report", emoji: "📊" },
+          { href: "/reports/annual", label: "Annual Report", emoji: "📅" },
           { href: "/transactions", label: "All Transactions", emoji: "📋" },
         ].map((item) => (
           <Link
