@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useAuth } from "../../../lib/auth-context";
-import { getMonthlyReport, type MonthlyReport } from "../../../lib/api";
+import { getMonthlyReport, listDebts, type MonthlyReport, type Debt } from "../../../lib/api";
 import {
   CategoryBreakdownGrid,
   ReportSummaryCards,
@@ -44,14 +44,19 @@ export default function ReportsPage() {
   const { accessToken } = useAuth();
   const [month, setMonth] = useState(currentMonth());
   const [report, setReport] = useState<MonthlyReport | null>(null);
+  const [debts, setDebts] = useState<Debt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchReport = useCallback(async () => {
     if (!accessToken) return;
     try {
-      const data = await getMonthlyReport(month, accessToken);
-      setReport(data);
+      const [reportData, debtData] = await Promise.all([
+        getMonthlyReport(month, accessToken),
+        listDebts({ status: "ACTIVE", limit: 100 }, accessToken),
+      ]);
+      setReport(reportData);
+      setDebts(debtData.debts);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load report");
     } finally {
@@ -168,6 +173,35 @@ export default function ReportsPage() {
             period={{ kind: "month", month }}
             onTransactionCreated={() => void fetchReport()}
           />
+
+          {/* Debt Summary */}
+          <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+            <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-4">Active Debts</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                  Debt Taken
+                </p>
+                <p className="text-xl font-bold text-red-600 dark:text-red-400">
+                  {formatCurrency(debts.filter(d => d.type === "TAKEN").reduce((sum, d) => sum + d.amount, 0))}
+                </p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                  {debts.filter(d => d.type === "TAKEN").length} debt{debts.filter(d => d.type === "TAKEN").length !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                  Debt Given
+                </p>
+                <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                  {formatCurrency(debts.filter(d => d.type === "GIVEN").reduce((sum, d) => sum + d.amount, 0))}
+                </p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                  {debts.filter(d => d.type === "GIVEN").length} debt{debts.filter(d => d.type === "GIVEN").length !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

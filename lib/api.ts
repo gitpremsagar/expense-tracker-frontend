@@ -308,6 +308,99 @@ export async function deleteTransaction(id: string, accessToken: string): Promis
   });
 }
 
+// ─── Debts ────────────────────────────────────────────────────────────────────
+
+export type DebtType = "TAKEN" | "GIVEN";
+export type DebtStatus = "ACTIVE" | "SETTLED";
+
+export type Debt = {
+  id: string;
+  type: DebtType;
+  partyName: string;
+  amount: number;
+  description: string | null;
+  date: string;
+  status: DebtStatus;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DebtPagination = {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+export type ListDebtsResult = {
+  debts: Debt[];
+  pagination: DebtPagination;
+};
+
+export type ListDebtsParams = {
+  type?: DebtType;
+  status?: DebtStatus;
+  page?: number;
+  limit?: number;
+};
+
+export async function createDebt(
+  input: { type: DebtType; partyName: string; amount: number; description?: string; date?: string },
+  accessToken: string,
+): Promise<Debt> {
+  const res = await apiFetch<{ debt: Debt }>("/debts", {
+    method: "POST",
+    body: JSON.stringify(input),
+    accessToken,
+  });
+  return res.debt;
+}
+
+export async function listDebts(
+  params: ListDebtsParams,
+  accessToken: string,
+): Promise<ListDebtsResult> {
+  const qs = new URLSearchParams();
+  if (params.type) qs.set("type", params.type);
+  if (params.status) qs.set("status", params.status);
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
+  const query = qs.toString() ? `?${qs.toString()}` : "";
+  return apiFetch<ListDebtsResult>(`/debts${query}`, {
+    method: "GET",
+    accessToken,
+  });
+}
+
+export async function getDebt(id: string, accessToken: string): Promise<Debt> {
+  const res = await apiFetch<{ debt: Debt }>(`/debts/${id}`, {
+    method: "GET",
+    accessToken,
+  });
+  return res.debt;
+}
+
+export async function updateDebt(
+  id: string,
+  input: { type?: DebtType; partyName?: string; amount?: number; description?: string | null; date?: string; status?: DebtStatus },
+  accessToken: string,
+): Promise<Debt> {
+  const res = await apiFetch<{ debt: Debt }>(`/debts/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+    accessToken,
+  });
+  return res.debt;
+}
+
+export async function deleteDebt(id: string, accessToken: string): Promise<void> {
+  await apiFetch<{ message: string }>(`/debts/${id}`, {
+    method: "DELETE",
+    accessToken,
+  });
+}
+
 // ─── Reports ──────────────────────────────────────────────────────────────────
 
 export type CategoryBreakdownItem = {
