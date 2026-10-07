@@ -244,6 +244,8 @@ export type ListTransactionsResult = {
 export type ListTransactionsParams = {
   month?: string;
   year?: number;
+  from?: string;
+  to?: string;
   type?: CategoryType;
   categoryId?: string;
   page?: number;
@@ -269,6 +271,8 @@ export async function listTransactions(
   const qs = new URLSearchParams();
   if (params.month) qs.set("month", params.month);
   if (params.year) qs.set("year", String(params.year));
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
   if (params.type) qs.set("type", params.type);
   if (params.categoryId) qs.set("categoryId", params.categoryId);
   if (params.page) qs.set("page", String(params.page));

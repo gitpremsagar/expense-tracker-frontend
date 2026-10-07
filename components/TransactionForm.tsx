@@ -32,6 +32,7 @@ type Props = {
   defaultDate?: Date;
   onSuccess?: () => void;
   onCancel?: () => void;
+  onDeleted?: () => void;
 };
 
 export default function TransactionForm({
@@ -40,6 +41,7 @@ export default function TransactionForm({
   defaultDate,
   onSuccess,
   onCancel,
+  onDeleted,
 }: Props) {
   const { accessToken } = useAuth();
   const router = useRouter();
@@ -132,6 +134,11 @@ export default function TransactionForm({
     setError(null);
     try {
       await deleteTransaction(transaction.id, accessToken);
+      if (onDeleted) {
+        setConfirmOpen(false);
+        onDeleted();
+        return;
+      }
       router.push("/transactions");
       router.refresh();
     } catch (err) {
