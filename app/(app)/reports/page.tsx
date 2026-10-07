@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../../lib/auth-context";
 import { getMonthlyReport, listDebts, type MonthlyReport, type Debt } from "../../../lib/api";
 import {
-  CategoryBreakdownGrid,
+  BreakdownSection,
   InsightsCard,
   PeriodComparisonCard,
   ReportViewToggle,
@@ -170,8 +170,9 @@ export default function ReportsPage() {
             </div>
           )}
 
-          <CategoryBreakdownGrid
-            items={report.categoryBreakdown}
+          <BreakdownSection
+            categories={report.categoryBreakdown}
+            groups={report.groupBreakdown}
             period={{ kind: "month", month }}
             onTransactionCreated={() => void fetchReport()}
           />

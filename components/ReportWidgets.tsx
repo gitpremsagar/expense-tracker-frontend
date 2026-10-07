@@ -19,7 +19,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { CategoryBreakdownItem, CategoryType, DailyTotalItem, MonthlyTotalItem } from "../lib/api";
+import type {
+  CategoryBreakdownItem,
+  CategoryType,
+  DailyTotalItem,
+  GroupBreakdownItem,
+  MonthlyTotalItem,
+} from "../lib/api";
 import { CategoryDetailSheet, type ReportPeriod } from "./CategoryDetailSheet";
 import { AddTransactionSheet } from "./AddTransactionSheet";
 import { Bar, cardClass, formatCurrency, formatSigned, signedColor } from "./MoneyFlow";
@@ -69,12 +75,12 @@ export function useIsDarkMode() {
   return isDark;
 }
 
-function CategoryPie({
+function CategoryPie<T extends { name: string; total: number }>({
   items,
   onSelect,
 }: {
-  items: CategoryBreakdownItem[];
-  onSelect: (item: CategoryBreakdownItem) => void;
+  items: T[];
+  onSelect: (item: T) => void;
 }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<ECharts | null>(null);
@@ -770,5 +776,263 @@ export function CategoryBreakdownGrid({
         />
       ) : null}
     </>
+  );
+}
+
+const GROUP_CARDS: { type: CategoryType; title: string; color: string; addLabel: string }[] = [
+  { type: "INCOME", title: "Income by Group", color: "bg-emerald-500", addLabel: "income" },
+  { type: "EXPENSE", title: "Expenses by Group", color: "bg-red-400", addLabel: "expense" },
+  { type: "SAVING", title: "Savings by Group", color: "bg-blue-500", addLabel: "saving" },
+  { type: "INVESTMENT", title: "Investments by Group", color: "bg-purple-500", addLabel: "investment" },
+];
+
+function groupKey(group: GroupBreakdownItem) {
+  return `${group.type}:${group.id ?? "ungrouped"}`;
+}
+
+function GroupBreakdown({
+  groups,
+  title,
+  color,
+  addLabel,
+  onSelectCategory,
+  onAdd,
+}: {
+  groups: GroupBreakdownItem[];
+  title: string;
+  color: string;
+  addLabel: string;
+  onSelectCategory: (categoryId: string) => void;
+  onAdd: () => void;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggle(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">{title}</h3>
+      {groups.length === 0 ? (
+        <p className="flex-1 text-sm text-zinc-400 dark:text-zinc-500">No data</p>
+      ) : (
+        <div className="flex-1">
+          <CategoryPie items={groups} onSelect={(group) => toggle(groupKey(group))} />
+          <ul className="mt-2 space-y-2">
+            {groups.map((group, index) => {
+              const key = groupKey(group);
+              const isOpen = expanded.has(key);
+              return (
+                <li key={key}>
+                  <button
+                    type="button"
+                    onClick={() => toggle(key)}
+                    aria-expanded={isOpen}
+                    className="w-full rounded-lg px-1 py-1 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span
+                        className="mr-2 h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: sliceColor(index) }}
+                      />
+                      <span
+                        className={`text-sm truncate flex-1 mr-2 ${
+                          group.id
+                            ? "font-medium text-zinc-800 dark:text-zinc-200"
+                            : "italic text-zinc-500 dark:text-zinc-400"
+                        }`}
+                      >
+                        {group.name}
+                        <span className="ml-1.5 text-xs font-normal not-italic text-zinc-400">
+                          {group.categories.length}
+                        </span>
+                      </span>
+                      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50 tabular-nums">
+                        {formatCurrency(group.total)}
+                      </span>
+                      <span className="text-xs text-zinc-400 dark:text-zinc-500 ml-2 w-10 text-right tabular-nums">
+                        {group.percentage}%
+                      </span>
+                      <svg
+                        className={`ml-1 h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${color}`}
+                        style={{ width: `${group.percentage}%` }}
+                      />
+                    </div>
+                  </button>
+                  {isOpen ? (
+                    <ul className="ml-5 mt-1 space-y-1 border-l border-zinc-200 pl-3 dark:border-zinc-800">
+                      {group.categories.map((cat) => {
+                        const shareOfGroup = group.total > 0 ? Math.round((cat.total / group.total) * 100) : 0;
+                        return (
+                          <li key={cat.id}>
+                            <button
+                              type="button"
+                              onClick={() => onSelectCategory(cat.id)}
+                              className="flex w-full items-center rounded-md px-1 py-1 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                            >
+                              <span className="flex-1 truncate mr-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                {cat.name}
+                              </span>
+                              <span className="text-sm tabular-nums text-zinc-800 dark:text-zinc-200">
+                                {formatCurrency(cat.total)}
+                              </span>
+                              <span
+                                className="ml-2 w-16 text-right text-xs tabular-nums text-zinc-400 dark:text-zinc-500"
+                                title="Share of group"
+                              >
+                                {shareOfGroup}% of grp
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onAdd}
+        className="mt-4 w-full rounded-lg border border-dashed border-zinc-300 py-2 text-sm font-medium text-zinc-600 transition-colors hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-700 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-emerald-600 dark:hover:bg-emerald-900/10 dark:hover:text-emerald-400"
+      >
+        Add {addLabel}
+      </button>
+    </div>
+  );
+}
+
+export function GroupBreakdownGrid({
+  groups,
+  categories,
+  period,
+  onTransactionCreated,
+}: {
+  groups: GroupBreakdownItem[];
+  categories: CategoryBreakdownItem[];
+  period: ReportPeriod;
+  onTransactionCreated: () => void;
+}) {
+  const [selected, setSelected] = useState<CategoryBreakdownItem | null>(null);
+  const [addType, setAddType] = useState<CategoryType | null>(null);
+
+  return (
+    <>
+      <div className="grid grid-cols-1 gap-6">
+        {GROUP_CARDS.map((card) => (
+          <div key={card.type} className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+            <GroupBreakdown
+              groups={groups.filter((g) => g.type === card.type)}
+              title={card.title}
+              color={card.color}
+              addLabel={card.addLabel}
+              onSelectCategory={(id) => setSelected(categories.find((c) => c.id === id) ?? null)}
+              onAdd={() => setAddType(card.type)}
+            />
+          </div>
+        ))}
+      </div>
+      {selected ? (
+        <CategoryDetailSheet item={selected} period={period} onClose={() => setSelected(null)} />
+      ) : null}
+      {addType ? (
+        <AddTransactionSheet
+          type={addType}
+          period={period}
+          onClose={() => setAddType(null)}
+          onCreated={onTransactionCreated}
+        />
+      ) : null}
+    </>
+  );
+}
+
+type BreakdownView = "group" | "category";
+
+export function BreakdownSection({
+  categories,
+  groups,
+  period,
+  onTransactionCreated,
+}: {
+  categories: CategoryBreakdownItem[];
+  groups: GroupBreakdownItem[];
+  period: ReportPeriod;
+  onTransactionCreated: () => void;
+}) {
+  const hasGroups = groups.some((g) => g.id !== null);
+  const [view, setView] = useState<BreakdownView | null>(null);
+  const activeView: BreakdownView = view ?? (hasGroups ? "group" : "category");
+
+  const tabs: { id: BreakdownView; label: string }[] = [
+    { id: "group", label: "By Group" },
+    { id: "category", label: "By Category" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Breakdown</h2>
+        <div className="inline-flex rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setView(tab.id)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                activeView === tab.id
+                  ? "bg-emerald-500 text-white"
+                  : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {activeView === "group" && !hasGroups ? (
+        <p className="rounded-xl border border-dashed border-zinc-200 px-4 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+          You haven&apos;t grouped any categories yet.{" "}
+          <Link href="/categories" className="font-medium text-emerald-600 hover:underline dark:text-emerald-400">
+            Create groups on the Categories page
+          </Link>
+          .
+        </p>
+      ) : null}
+      {activeView === "group" ? (
+        <GroupBreakdownGrid
+          groups={groups}
+          categories={categories}
+          period={period}
+          onTransactionCreated={onTransactionCreated}
+        />
+      ) : (
+        <CategoryBreakdownGrid
+          items={categories}
+          period={period}
+          onTransactionCreated={onTransactionCreated}
+        />
+      )}
+    </div>
   );
 }

@@ -165,13 +165,14 @@ export type Category = {
   id: string;
   name: string;
   type: CategoryType;
+  groupId: string | null;
   userId: string;
   createdAt: string;
   updatedAt: string;
 };
 
 export async function createCategory(
-  input: { name: string; type: CategoryType },
+  input: { name: string; type: CategoryType; groupId?: string | null },
   accessToken: string,
 ): Promise<Category> {
   const res = await apiFetch<{ category: Category }>("/categories", {
@@ -196,7 +197,7 @@ export async function listCategories(
 
 export async function updateCategory(
   id: string,
-  input: { name: string },
+  input: { name?: string; groupId?: string | null },
   accessToken: string,
 ): Promise<Category> {
   const res = await apiFetch<{ category: Category }>(`/categories/${id}`, {
@@ -209,6 +210,62 @@ export async function updateCategory(
 
 export async function deleteCategory(id: string, accessToken: string): Promise<void> {
   await apiFetch<{ message: string }>(`/categories/${id}`, {
+    method: "DELETE",
+    accessToken,
+  });
+}
+
+// ─── Category Groups ──────────────────────────────────────────────────────────
+
+export type CategoryGroup = {
+  id: string;
+  name: string;
+  type: CategoryType;
+  userId: string;
+  categories?: { id: string; name: string }[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function listCategoryGroups(
+  accessToken: string,
+  type?: CategoryType,
+): Promise<CategoryGroup[]> {
+  const params = type ? `?type=${type}` : "";
+  const res = await apiFetch<{ groups: CategoryGroup[] }>(`/category-groups${params}`, {
+    method: "GET",
+    accessToken,
+  });
+  return res.groups;
+}
+
+export async function createCategoryGroup(
+  input: { name: string; type: CategoryType },
+  accessToken: string,
+): Promise<CategoryGroup> {
+  const res = await apiFetch<{ group: CategoryGroup }>("/category-groups", {
+    method: "POST",
+    body: JSON.stringify(input),
+    accessToken,
+  });
+  return res.group;
+}
+
+export async function updateCategoryGroup(
+  id: string,
+  input: { name: string },
+  accessToken: string,
+): Promise<CategoryGroup> {
+  const res = await apiFetch<{ group: CategoryGroup }>(`/category-groups/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+    accessToken,
+  });
+  return res.group;
+}
+
+export async function deleteCategoryGroup(id: string, accessToken: string): Promise<void> {
+  await apiFetch<{ message: string }>(`/category-groups/${id}`, {
     method: "DELETE",
     accessToken,
   });
@@ -464,8 +521,19 @@ export type CategoryBreakdownItem = {
   id: string;
   name: string;
   type: CategoryType;
+  groupId: string | null;
+  groupName: string | null;
   total: number;
   percentage: number;
+};
+
+export type GroupBreakdownItem = {
+  id: string | null;
+  name: string;
+  type: CategoryType;
+  total: number;
+  percentage: number;
+  categories: { id: string; name: string; total: number; percentage: number }[];
 };
 
 export type DailyTotalItem = {
@@ -484,6 +552,7 @@ export type MonthlyReport = {
   totalInvestment: number;
   netBalance: number;
   categoryBreakdown: CategoryBreakdownItem[];
+  groupBreakdown: GroupBreakdownItem[];
   dailyTotals: DailyTotalItem[];
 };
 
@@ -511,6 +580,7 @@ export type AnnualReport = {
   totalInvestment: number;
   netBalance: number;
   categoryBreakdown: CategoryBreakdownItem[];
+  groupBreakdown: GroupBreakdownItem[];
   monthlyTotals: MonthlyTotalItem[];
 };
 
