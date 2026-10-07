@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "../../../lib/auth-context";
 import {
@@ -13,6 +13,24 @@ import {
 } from "../../../lib/api";
 import ConfirmDialog from "../../../components/ConfirmDialog";
 import { EditTransactionSheet } from "../../../components/EditTransactionSheet";
+
+const TYPE_LABEL: Record<CategoryType, string> = {
+  INCOME: "Income",
+  EXPENSE: "Expense",
+  SAVING: "Saving",
+  INVESTMENT: "Investment",
+};
+
+const ALL_TYPES: CategoryType[] = ["INCOME", "EXPENSE", "SAVING", "INVESTMENT"];
+
+function formatTotal(amount: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
 
 const TYPE_SHORT: Record<CategoryType, string> = {
   INCOME: "Inc",
@@ -105,7 +123,10 @@ function presetRange(id: PresetId): { from: string; to: string } {
 }
 
 const inputClass =
-  "rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none ring-emerald-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
+  "min-w-0 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none ring-emerald-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
+
+const compactInputClass =
+  "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 outline-none ring-emerald-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
 
 export default function TransactionsPage() {
   const { accessToken } = useAuth();
@@ -155,10 +176,52 @@ export default function TransactionsPage() {
     [transactions, searchTerm, minAmountValue, maxAmountValue],
   );
 
+  const totals = useMemo(() => {
+    const sums: Record<CategoryType, number> = { INCOME: 0, EXPENSE: 0, SAVING: 0, INVESTMENT: 0 };
+    for (const t of visibleTransactions) sums[t.type] += t.amount;
+    return sums;
+  }, [visibleTransactions]);
+
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    function onMouseDown(event: MouseEvent) {
+      if (toolbarRef.current && !toolbarRef.current.contains(event.target as Node)) {
+        setFiltersOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setFiltersOpen(false);
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [filtersOpen]);
+
+  const activeFilterCount =
+    (activePreset ? 0 : 1) +
+    (typeFilter ? 1 : 0) +
+    (categoryFilter ? 1 : 0) +
+    (minAmount.trim() ? 1 : 0) +
+    (maxAmount.trim() ? 1 : 0);
+
   function applyPreset(id: PresetId) {
     const r = presetRange(id);
     setFromDate(r.from);
     setToDate(r.to);
+  }
+
+  function resetFilters() {
+    applyPreset("thisMonth");
+    setTypeFilter("");
+    setCategoryFilter("");
+    setMinAmount("");
+    setMaxAmount("");
   }
 
   function handleTypeChange(value: CategoryType | "") {
@@ -228,18 +291,18 @@ export default function TransactionsPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">Transactions</h1>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">Transactions</h1>
           {!isLoading && !error && (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
+            <span className="truncate text-sm text-zinc-500 dark:text-zinc-400">
               {visibleTransactions.length} transaction{visibleTransactions.length !== 1 ? "s" : ""}
-            </p>
+            </span>
           )}
         </div>
         <Link
           href="/transactions/new"
-          className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -249,25 +312,26 @@ export default function TransactionsPage() {
       </div>
 
       {/* Filters */}
-      <div className="mb-6 space-y-3">
-        <div className="flex flex-wrap gap-2">
+      <div ref={toolbarRef} className="relative mb-3 flex items-center gap-2">
+        <select
+          value={activePreset ?? "custom"}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value === "custom") setFiltersOpen(true);
+            else applyPreset(value as PresetId);
+          }}
+          aria-label="Period"
+          className={`${compactInputClass} w-32 shrink-0 sm:w-36`}
+        >
           {PRESETS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => applyPreset(p.id)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                activePreset === p.id
-                  ? "border-emerald-600 bg-emerald-600 text-white"
-                  : "border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              }`}
-            >
+            <option key={p.id} value={p.id}>
               {p.label}
-            </button>
+            </option>
           ))}
-        </div>
+          <option value="custom">Custom</option>
+        </select>
 
-        <div className="relative">
+        <div className="relative min-w-0 flex-1">
           <svg
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
             fill="none"
@@ -282,7 +346,7 @@ export default function TransactionsPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search by note or category"
-            className={`${inputClass} w-full pl-9 pr-9`}
+            className={`${compactInputClass} w-full pl-9 pr-9`}
           />
           {searchInput && (
             <button
@@ -298,84 +362,138 @@ export default function TransactionsPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">From</span>
-            <input
-              type="date"
-              value={fromDate}
-              max={toDate || undefined}
-              onChange={(e) => { setFromDate(e.target.value); }}
-              className={inputClass}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">To</span>
-            <input
-              type="date"
-              value={toDate}
-              min={fromDate || undefined}
-              onChange={(e) => { setToDate(e.target.value); }}
-              className={inputClass}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">Type</span>
-            <select
-              value={typeFilter}
-              onChange={(e) => handleTypeChange(e.target.value as CategoryType | "")}
-              className={inputClass}
-            >
-              <option value="">All types</option>
-              <option value="INCOME">Income</option>
-              <option value="EXPENSE">Expense</option>
-              <option value="SAVING">Saving</option>
-              <option value="INVESTMENT">Investment</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">Category</span>
-            <select
-              value={categoryFilter}
-              onChange={(e) => { setCategoryFilter(e.target.value); }}
-              className={inputClass}
-            >
-              <option value="">All categories</option>
-              {visibleCategories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {typeFilter ? cat.name : `${cat.name} (${TYPE_SHORT[cat.type]})`}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">Min amount (₹)</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={minAmount}
-              onChange={(e) => setMinAmount(e.target.value)}
-              placeholder="0"
-              className={inputClass}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">Max amount (₹)</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={maxAmount}
-              onChange={(e) => setMaxAmount(e.target.value)}
-              placeholder="Any"
-              className={inputClass}
-            />
-          </label>
-        </div>
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((open) => !open)}
+          aria-expanded={filtersOpen}
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+            filtersOpen || activeFilterCount > 0
+              ? "border-emerald-500 text-emerald-700 dark:text-emerald-400"
+              : "border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          }`}
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18l-7 8.5V19l-4 2v-8.5L3 4z" />
+          </svg>
+          <span className="hidden sm:inline">Filters</span>
+          {activeFilterCount > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-xs font-semibold text-white">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+
+        {filtersOpen && (
+          <div className="absolute right-0 top-full z-20 mt-2 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-lg sm:w-80 dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">From</span>
+                <input
+                  type="date"
+                  value={fromDate}
+                  max={toDate || undefined}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className={inputClass}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">To</span>
+                <input
+                  type="date"
+                  value={toDate}
+                  min={fromDate || undefined}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className={inputClass}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">Type</span>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => handleTypeChange(e.target.value as CategoryType | "")}
+                  className={inputClass}
+                >
+                  <option value="">All types</option>
+                  <option value="INCOME">Income</option>
+                  <option value="EXPENSE">Expense</option>
+                  <option value="SAVING">Saving</option>
+                  <option value="INVESTMENT">Investment</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">Category</span>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">All categories</option>
+                  {visibleCategories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {typeFilter ? cat.name : `${cat.name} (${TYPE_SHORT[cat.type]})`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">Min amount (₹)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                  placeholder="0"
+                  className={inputClass}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">Max amount (₹)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={maxAmount}
+                  onChange={(e) => setMaxAmount(e.target.value)}
+                  placeholder="Any"
+                  className={inputClass}
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="text-sm text-zinc-500 underline hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltersOpen(false)}
+                className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {!isLoading && !error && visibleTransactions.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          {ALL_TYPES.filter((type) => totals[type] > 0).map((type) => (
+            <span key={type} className="whitespace-nowrap">
+              <span className="text-zinc-500 dark:text-zinc-400">{TYPE_LABEL[type]}</span>{" "}
+              <span className={`font-semibold tabular-nums ${typeAmountClass(type)}`}>
+                {formatTotal(totals[type])}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="space-y-3">

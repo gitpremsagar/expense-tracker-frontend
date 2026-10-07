@@ -4,19 +4,20 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "../../../lib/auth-context";
 import { getMonthlyReport, listTransactions, listDebts, type MonthlyReport, type Transaction, type Debt } from "../../../lib/api";
+import {
+  Bar,
+  DebtsCard,
+  MoneyFlowCard,
+  NetBalanceBanner,
+  cardClass,
+  formatCurrency,
+} from "../../../components/MoneyFlow";
 
 function currentMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(Math.abs(amount));
-}
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString("en-IN", {
@@ -27,30 +28,48 @@ function formatDate(dateStr: string) {
   });
 }
 
-function StatCard({
-  label,
-  value,
-  color,
-  icon,
-}: {
-  label: string;
-  value: string;
-  color: "green" | "red" | "blue" | "purple";
-  icon: React.ReactNode;
-}) {
-  const colorMap = {
-    green: "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400",
-    red: "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400",
-    blue: "bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400",
-    purple: "bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400",
-  };
+
+function TopExpensesCard({ report }: { report: MonthlyReport }) {
+  const expenses = report.categoryBreakdown
+    .filter((c) => c.type === "EXPENSE")
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className={`inline-flex items-center justify-center rounded-xl p-2 mb-3 ${colorMap[color]}`}>
-        {icon}
+    <div className={cardClass}>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Where your money went</h2>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Top expense categories</p>
+        </div>
+        <Link href="/reports" className="text-sm text-emerald-600 dark:text-emerald-400 hover:underline">
+          View report
+        </Link>
       </div>
-      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">{label}</p>
-      <p className="text-xl font-bold text-zinc-900 dark:text-zinc-50 mt-0.5">{value}</p>
+      {expenses.length === 0 ? (
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">No expenses this month.</p>
+      ) : (
+        <ul className="space-y-3">
+          {expenses.map((item) => (
+            <li key={item.id}>
+              <div className="flex items-center justify-between text-sm mb-1">
+                <span className="truncate mr-2 text-zinc-700 dark:text-zinc-300">{item.name}</span>
+                <span className="flex items-center gap-2">
+                  <span className="font-medium tabular-nums text-zinc-900 dark:text-zinc-50">
+                    {formatCurrency(item.total)}
+                  </span>
+                  <span className="w-10 text-right text-xs tabular-nums text-zinc-400 dark:text-zinc-500">
+                    {item.percentage}%
+                  </span>
+                </span>
+              </div>
+              <div className="flex h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                <Bar value={item.total} scale={report.totalExpense} className="rounded-full bg-red-400" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -87,6 +106,9 @@ export default function DashboardPage() {
     })();
   }, [accessToken, month]);
 
+  const debtTaken = debts.filter((d) => d.type === "TAKEN").reduce((sum, d) => sum + d.outstanding, 0);
+  const debtGiven = debts.filter((d) => d.type === "GIVEN").reduce((sum, d) => sum + d.outstanding, 0);
+
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="flex items-center justify-between mb-6">
@@ -108,83 +130,25 @@ export default function DashboardPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-            <div key={i} className="h-28 rounded-2xl bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+        <div className="space-y-4 mb-8">
+          <div className="h-32 rounded-2xl bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-48 rounded-2xl bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
           ))}
         </div>
       ) : report ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          <StatCard
-            label="Total Income"
-            value={formatCurrency(report.totalIncome)}
-            color="green"
-            icon={
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12" />
-              </svg>
-            }
+        <div className="space-y-4 mb-8">
+          <NetBalanceBanner netBalance={report.netBalance} label={monthLabel} />
+          <MoneyFlowCard
+            income={report.totalIncome}
+            expense={report.totalExpense}
+            saving={report.totalSaving}
+            investment={report.totalInvestment}
           />
-          <StatCard
-            label="Total Expense"
-            value={formatCurrency(report.totalExpense)}
-            color="red"
-            icon={
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 13l-5 5m0 0l-5-5m5 5V6" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Total Savings"
-            value={formatCurrency(report.totalSaving)}
-            color="blue"
-            icon={
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Total Investments"
-            value={formatCurrency(report.totalInvestment)}
-            color="purple"
-            icon={
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Net Balance"
-            value={`${report.netBalance >= 0 ? "+" : ""}${formatCurrency(report.netBalance)}`}
-            color={report.netBalance >= 0 ? "blue" : "red"}
-            icon={
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Debt Taken"
-            value={formatCurrency(debts.filter(d => d.type === "TAKEN").reduce((sum, d) => sum + d.outstanding, 0))}
-            color="red"
-            icon={
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Debt Given"
-            value={formatCurrency(debts.filter(d => d.type === "GIVEN").reduce((sum, d) => sum + d.outstanding, 0))}
-            color="green"
-            icon={
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            }
-          />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <TopExpensesCard report={report} />
+            <DebtsCard taken={debtTaken} given={debtGiven} />
+          </div>
         </div>
       ) : null}
 

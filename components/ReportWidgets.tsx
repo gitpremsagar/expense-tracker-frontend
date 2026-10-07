@@ -8,37 +8,23 @@ import { PieChart } from "echarts/charts";
 import { TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { ECharts } from "echarts/core";
-import type { CategoryBreakdownItem, CategoryType } from "../lib/api";
+import {
+  Bar as ChartBar,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { CategoryBreakdownItem, CategoryType, DailyTotalItem, MonthlyTotalItem } from "../lib/api";
 import { CategoryDetailSheet, type ReportPeriod } from "./CategoryDetailSheet";
 import { AddTransactionSheet } from "./AddTransactionSheet";
+import { Bar, cardClass, formatCurrency, formatSigned, signedColor } from "./MoneyFlow";
 
-export function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(Math.abs(amount));
-}
-
-export function StatCard({
-  label,
-  value,
-  sub,
-  colorClass,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  colorClass: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider dark:text-zinc-400">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${colorClass}`}>{value}</p>
-      {sub && <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">{sub}</p>}
-    </div>
-  );
-}
+export { formatCurrency };
 
 echarts.use([PieChart, TooltipComponent, CanvasRenderer]);
 
@@ -69,7 +55,7 @@ function sliceColor(index: number) {
   return SLICE_COLORS[index % SLICE_COLORS.length] ?? SLICE_COLORS[0];
 }
 
-function useIsDarkMode() {
+export function useIsDarkMode() {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
@@ -283,51 +269,445 @@ export function ReportViewToggle() {
   );
 }
 
-export function ReportSummaryCards({
-  totalIncome,
-  totalExpense,
-  totalSaving,
-  totalInvestment,
-  netBalance,
-}: {
+export type PeriodTotals = {
   totalIncome: number;
   totalExpense: number;
   totalSaving: number;
   totalInvestment: number;
   netBalance: number;
+};
+
+export type TrendBucket = {
+  label: string;
+  fullLabel: string;
+  income: number;
+  expense: number;
+  saving: number;
+  investment: number;
+};
+
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+export function daysInMonth(month: string) {
+  const [year, mon] = month.split("-").map(Number);
+  return new Date(year!, mon!, 0).getDate();
+}
+
+export function fillDailyBuckets(month: string, dailyTotals: DailyTotalItem[]): TrendBucket[] {
+  const [, mon] = month.split("-").map(Number);
+  const byDay = new Map(dailyTotals.map((d) => [parseInt(d.date.slice(8, 10), 10), d]));
+  return Array.from({ length: daysInMonth(month) }, (_, i) => {
+    const day = i + 1;
+    const d = byDay.get(day);
+    return {
+      label: String(day),
+      fullLabel: `${day} ${MONTH_SHORT[mon! - 1]}`,
+      income: d?.income ?? 0,
+      expense: d?.expense ?? 0,
+      saving: d?.saving ?? 0,
+      investment: d?.investment ?? 0,
+    };
+  });
+}
+
+export function fillMonthlyBuckets(year: number, monthlyTotals: MonthlyTotalItem[]): TrendBucket[] {
+  const byMonth = new Map(monthlyTotals.map((m) => [parseInt(m.month.slice(5, 7), 10), m]));
+  return MONTH_SHORT.map((name, i) => {
+    const m = byMonth.get(i + 1);
+    return {
+      label: name,
+      fullLabel: `${name} ${year}`,
+      income: m?.income ?? 0,
+      expense: m?.expense ?? 0,
+      saving: m?.saving ?? 0,
+      investment: m?.investment ?? 0,
+    };
+  });
+}
+
+function outflowOf(b: TrendBucket) {
+  return b.expense + b.saving + b.investment;
+}
+
+type ChangeSense = "higherIsGood" | "higherIsBad" | "neutral";
+
+function changeColor(change: number, sense: ChangeSense) {
+  if (change === 0 || sense === "neutral") return "text-zinc-500 dark:text-zinc-400";
+  const good = sense === "higherIsGood" ? change > 0 : change < 0;
+  return good ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400";
+}
+
+export function PeriodComparisonCard({
+  current,
+  previous,
+  previousLabel,
+}: {
+  current: PeriodTotals;
+  previous: PeriodTotals | null;
+  previousLabel: string;
+}) {
+  const rows: { label: string; key: keyof PeriodTotals; sense: ChangeSense; signed?: boolean }[] = [
+    { label: "Income", key: "totalIncome", sense: "higherIsGood" },
+    { label: "Expense", key: "totalExpense", sense: "higherIsBad" },
+    { label: "Savings", key: "totalSaving", sense: "neutral" },
+    { label: "Investments", key: "totalInvestment", sense: "neutral" },
+    { label: "Net balance", key: "netBalance", sense: "higherIsGood", signed: true },
+  ];
+
+  return (
+    <div className={cardClass}>
+      <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Compared to {previousLabel}</h2>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">How each total moved since the previous period</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              <th className="pb-2 font-medium">Type</th>
+              <th className="pb-2 text-right font-medium">This period</th>
+              <th className="pb-2 text-right font-medium">Previous</th>
+              <th className="pb-2 text-right font-medium">Change</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {rows.map((row) => {
+              const cur = current[row.key];
+              const prev = previous ? previous[row.key] : null;
+              const change = prev == null ? null : cur - prev;
+              const pct = prev == null || prev === 0 || change == null ? null : (change / Math.abs(prev)) * 100;
+              return (
+                <tr key={row.key}>
+                  <td className="py-2 text-zinc-700 dark:text-zinc-300">{row.label}</td>
+                  <td
+                    className={`py-2 text-right font-semibold tabular-nums ${
+                      row.signed ? signedColor(cur) : "text-zinc-900 dark:text-zinc-50"
+                    }`}
+                  >
+                    {row.signed ? formatSigned(cur) : formatCurrency(cur)}
+                  </td>
+                  <td className="py-2 text-right tabular-nums text-zinc-500 dark:text-zinc-400">
+                    {prev == null ? "—" : row.signed ? formatSigned(prev) : formatCurrency(prev)}
+                  </td>
+                  <td className={`py-2 text-right tabular-nums ${change == null ? "text-zinc-400" : changeColor(change, row.sense)}`}>
+                    {change == null ? (
+                      "—"
+                    ) : change === 0 ? (
+                      "No change"
+                    ) : (
+                      <>
+                        {change > 0 ? "▲" : "▼"} {formatCurrency(change)}
+                        {pct != null && <span className="ml-1 text-xs">({Math.abs(pct).toFixed(0)}%)</span>}
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function InsightTile({
+  label,
+  value,
+  detail,
+  valueClass = "text-zinc-900 dark:text-zinc-50",
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  valueClass?: string;
 }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <StatCard
-        label="Total Income"
-        value={formatCurrency(totalIncome)}
-        colorClass="text-emerald-600 dark:text-emerald-400"
-      />
-      <StatCard
-        label="Total Expense"
-        value={formatCurrency(totalExpense)}
-        colorClass="text-red-600 dark:text-red-400"
-      />
-      <StatCard
-        label="Total Savings"
-        value={formatCurrency(totalSaving)}
-        colorClass="text-blue-600 dark:text-blue-400"
-      />
-      <StatCard
-        label="Total Investments"
-        value={formatCurrency(totalInvestment)}
-        colorClass="text-purple-600 dark:text-purple-400"
-      />
-      <StatCard
-        label="Net Balance"
-        value={`${netBalance >= 0 ? "+" : "-"}${formatCurrency(netBalance)}`}
-        sub={netBalance >= 0 ? "Surplus" : "Deficit"}
-        colorClass={
-          netBalance >= 0
-            ? "text-blue-600 dark:text-blue-400"
-            : "text-red-600 dark:text-red-400"
-        }
-      />
+    <div className="rounded-xl bg-zinc-50 px-4 py-3 dark:bg-zinc-800/50">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+      <p className={`mt-0.5 text-lg font-semibold tabular-nums truncate ${valueClass}`}>{value}</p>
+      {detail && <p className="text-xs text-zinc-400 dark:text-zinc-500 truncate">{detail}</p>}
+    </div>
+  );
+}
+
+export function InsightsCard({
+  mode,
+  totals,
+  categoryBreakdown,
+  buckets,
+  elapsed,
+  projectDays,
+}: {
+  mode: "month" | "year";
+  totals: PeriodTotals;
+  categoryBreakdown: CategoryBreakdownItem[];
+  buckets: TrendBucket[];
+  elapsed: number;
+  projectDays?: number;
+}) {
+  const { totalIncome: income, totalExpense: expense } = totals;
+  const savingsRate = income > 0 ? ((income - expense) / income) * 100 : null;
+  const expenseRatio = income > 0 ? (expense / income) * 100 : null;
+  const unit = mode === "month" ? "day" : "month";
+
+  const topCategory = categoryBreakdown
+    .filter((c) => c.type === "EXPENSE")
+    .reduce<CategoryBreakdownItem | null>((best, c) => (!best || c.total > best.total ? c : best), null);
+
+  const peak = buckets.reduce<TrendBucket | null>(
+    (best, b) => (b.expense > 0 && (!best || b.expense > best.expense) ? b : best),
+    null,
+  );
+
+  const activeBuckets = buckets.filter((b) => b.income + outflowOf(b) > 0);
+  const spendDays = buckets.slice(0, elapsed).filter((b) => b.expense > 0).length;
+  const deficitMonths = activeBuckets.filter((b) => b.income - outflowOf(b) < 0).length;
+  const avgDivisor = mode === "year" ? activeBuckets.length : elapsed;
+  const avgSpend = avgDivisor > 0 ? expense / avgDivisor : 0;
+
+  return (
+    <div className={cardClass}>
+      <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Key insights</h2>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">Quick read on your spending habits</p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <InsightTile
+          label="Savings rate"
+          value={savingsRate == null ? "—" : `${savingsRate.toFixed(0)}%`}
+          detail="Income left after expenses"
+          valueClass={savingsRate == null ? undefined : signedColor(savingsRate)}
+        />
+        <InsightTile
+          label="Expense to income"
+          value={expenseRatio == null ? "—" : `${expenseRatio.toFixed(0)}%`}
+          detail={expenseRatio != null && expenseRatio > 100 ? "Spending exceeds income" : "Share of income spent"}
+          valueClass={
+            expenseRatio != null && expenseRatio > 100 ? "text-red-600 dark:text-red-400" : undefined
+          }
+        />
+        <InsightTile
+          label={mode === "month" ? "Average daily spend" : "Average monthly spend"}
+          value={formatCurrency(avgSpend)}
+          detail={`Over ${avgDivisor} ${mode === "year" ? "active " : ""}${unit}${avgDivisor === 1 ? "" : "s"}`}
+        />
+        <InsightTile
+          label="Biggest expense"
+          value={topCategory ? topCategory.name : "—"}
+          detail={topCategory ? `${formatCurrency(topCategory.total)} · ${topCategory.percentage}% of expenses` : undefined}
+        />
+        <InsightTile
+          label={`Highest-spending ${unit}`}
+          value={peak ? peak.fullLabel : "—"}
+          detail={peak ? formatCurrency(peak.expense) : undefined}
+        />
+        {mode === "month" ? (
+          <InsightTile
+            label="Days with spending"
+            value={`${spendDays} / ${elapsed}`}
+            detail={elapsed > 0 ? `${Math.round((spendDays / elapsed) * 100)}% of days` : undefined}
+          />
+        ) : (
+          <InsightTile
+            label="Months in deficit"
+            value={`${deficitMonths} / ${activeBuckets.length}`}
+            detail="Out of months with activity"
+            valueClass={deficitMonths > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}
+          />
+        )}
+        {projectDays != null && (
+          <InsightTile
+            label="Projected month-end expense"
+            value={formatCurrency(avgSpend * projectDays)}
+            detail={`At the current pace over ${projectDays} days`}
+            valueClass={
+              avgSpend * projectDays > income ? "text-red-600 dark:text-red-400" : undefined
+            }
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+const SERIES_COLORS = {
+  income: "#10b981",
+  expense: "#f87171",
+  saving: "#3b82f6",
+  investment: "#a855f7",
+};
+
+function compactCurrency(value: number) {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}k`;
+  return `${sign}₹${abs}`;
+}
+
+export function TrendChart({
+  mode,
+  buckets,
+  elapsed = buckets.length,
+}: {
+  mode: "month" | "year";
+  buckets: TrendBucket[];
+  elapsed?: number;
+}) {
+  const isDark = useIsDarkMode();
+  const gridColor = isDark ? "#27272a" : "#e5e7eb";
+  const axisColor = isDark ? "#a1a1aa" : "#52525b";
+
+  let cumIncome = 0;
+  let cumOutflow = 0;
+  const data = buckets.map((b, i) => {
+    cumIncome += b.income;
+    cumOutflow += outflowOf(b);
+    const isFuture = i >= elapsed;
+    const isEmpty = b.income + outflowOf(b) === 0;
+    return {
+      label: b.label,
+      fullLabel: b.fullLabel,
+      Income: b.income,
+      Expense: b.expense,
+      Saving: b.saving,
+      Investment: b.investment,
+      "Cumulative income": isFuture ? null : +cumIncome.toFixed(2),
+      "Cumulative outflow": isFuture ? null : +cumOutflow.toFixed(2),
+      Net: isFuture || isEmpty ? null : +(b.income - outflowOf(b)).toFixed(2),
+    };
+  });
+
+  const nets = data.map((d) => d.Net ?? 0);
+  const maxNet = Math.max(...nets, 0);
+  const minNet = Math.min(...nets, 0);
+  const zeroOffset = maxNet - minNet > 0 ? maxNet / (maxNet - minNet) : 0.5;
+
+  return (
+    <div className={cardClass}>
+      <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+        {mode === "month" ? "Daily cash flow" : "Monthly cash flow"}
+      </h2>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
+        {mode === "month"
+          ? "Bars show each day's money in and out. Lines show running totals, so you can see when spending overtook income."
+          : "Income against outflow each month. The line shows net balance: green above zero, red below."}
+      </p>
+      <ResponsiveContainer width="100%" height={280}>
+        <ComposedChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+          {mode === "year" && (
+            <defs>
+              <linearGradient id="netGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset={zeroOffset} stopColor="#10b981" />
+                <stop offset={zeroOffset} stopColor="#ef4444" />
+              </linearGradient>
+            </defs>
+          )}
+          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 11, fill: axisColor }}
+            stroke={gridColor}
+            interval={mode === "month" ? "preserveStartEnd" : 0}
+          />
+          <YAxis tick={{ fontSize: 11, fill: axisColor }} stroke={gridColor} width={56} tickFormatter={compactCurrency} />
+          <Tooltip
+            formatter={(value, name) => [
+              typeof value === "number" ? (name === "Net" ? formatSigned(value) : formatCurrency(value)) : String(value),
+              name,
+            ]}
+            labelFormatter={(_, payload) => payload?.[0]?.payload?.fullLabel ?? ""}
+            contentStyle={{
+              fontSize: 12,
+              backgroundColor: isDark ? "#18181b" : "#ffffff",
+              borderColor: isDark ? "#3f3f46" : "#e4e4e7",
+              color: isDark ? "#e4e4e7" : "#3f3f46",
+            }}
+            cursor={{ fill: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}
+          />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <ChartBar dataKey="Income" fill={SERIES_COLORS.income} radius={[3, 3, 0, 0]} />
+          <ChartBar dataKey="Expense" stackId="out" fill={SERIES_COLORS.expense} />
+          <ChartBar dataKey="Saving" stackId="out" fill={SERIES_COLORS.saving} />
+          <ChartBar dataKey="Investment" stackId="out" fill={SERIES_COLORS.investment} radius={[3, 3, 0, 0]} />
+          {mode === "month" ? (
+            <>
+              <Line type="monotone" dataKey="Cumulative income" stroke="#34d399" strokeWidth={2} dot={false} />
+              <Line
+                type="monotone"
+                dataKey="Cumulative outflow"
+                stroke="#f87171"
+                strokeWidth={2}
+                strokeDasharray="5 3"
+                dot={false}
+              />
+            </>
+          ) : (
+            <Line type="linear" dataKey="Net" stroke="url(#netGradient)" strokeWidth={2.5} dot={{ r: 3 }} />
+          )}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+export function MonthlyBreakdownTable({ buckets }: { buckets: TrendBucket[] }) {
+  const maxAbsNet = Math.max(...buckets.map((b) => Math.abs(b.income - outflowOf(b))), 0);
+
+  return (
+    <div className={cardClass}>
+      <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Month by month</h2>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">Income, outflow and what was left each month</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              <th className="pb-2 font-medium">Month</th>
+              <th className="pb-2 text-right font-medium">Income</th>
+              <th className="pb-2 text-right font-medium">Outflow</th>
+              <th className="pb-2 text-right font-medium">Net</th>
+              <th className="pb-2 text-right font-medium">Savings rate</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {buckets.map((b) => {
+              const outflow = outflowOf(b);
+              const net = b.income - outflow;
+              const isEmpty = b.income + outflow === 0;
+              const rate = b.income > 0 ? ((b.income - b.expense) / b.income) * 100 : null;
+              return (
+                <tr key={b.label} className={isEmpty ? "opacity-40" : undefined}>
+                  <td className="py-2 text-zinc-700 dark:text-zinc-300">{b.label}</td>
+                  <td className="py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {formatCurrency(b.income)}
+                  </td>
+                  <td className="py-2 text-right tabular-nums text-zinc-700 dark:text-zinc-300">
+                    {formatCurrency(outflow)}
+                  </td>
+                  <td className="py-2 text-right">
+                    <span className={`font-semibold tabular-nums ${isEmpty ? "text-zinc-500" : signedColor(net)}`}>
+                      {isEmpty ? "—" : formatSigned(net)}
+                    </span>
+                    {!isEmpty && (
+                      <div className="ml-auto mt-1 flex h-1.5 w-24 justify-end overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                        <Bar
+                          value={Math.abs(net)}
+                          scale={maxAbsNet}
+                          className={`rounded-full ${net < 0 ? "bg-red-500" : "bg-emerald-500"}`}
+                        />
+                      </div>
+                    )}
+                  </td>
+                  <td
+                    className={`py-2 text-right tabular-nums ${
+                      rate == null ? "text-zinc-400" : signedColor(rate)
+                    }`}
+                  >
+                    {rate == null ? "—" : `${rate.toFixed(0)}%`}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

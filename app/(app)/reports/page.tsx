@@ -1,24 +1,18 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
 import { useAuth } from "../../../lib/auth-context";
 import { getMonthlyReport, listDebts, type MonthlyReport, type Debt } from "../../../lib/api";
 import {
   CategoryBreakdownGrid,
-  ReportSummaryCards,
+  InsightsCard,
+  PeriodComparisonCard,
   ReportViewToggle,
-  formatCurrency,
+  TrendChart,
+  daysInMonth,
+  fillDailyBuckets,
 } from "../../../components/ReportWidgets";
+import { DebtsCard, MoneyFlowCard, NetBalanceBanner } from "../../../components/MoneyFlow";
 
 function currentMonth() {
   const now = new Date();
@@ -44,6 +38,7 @@ export default function ReportsPage() {
   const { accessToken } = useAuth();
   const [month, setMonth] = useState(currentMonth());
   const [report, setReport] = useState<MonthlyReport | null>(null);
+  const [previousReport, setPreviousReport] = useState<MonthlyReport | null>(null);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,11 +46,13 @@ export default function ReportsPage() {
   const fetchReport = useCallback(async () => {
     if (!accessToken) return;
     try {
-      const [reportData, debtData] = await Promise.all([
+      const [reportData, previousData, debtData] = await Promise.all([
         getMonthlyReport(month, accessToken),
+        getMonthlyReport(navigateMonth(month, -1), accessToken).catch(() => null),
         listDebts({ status: "ACTIVE", limit: 100 }, accessToken),
       ]);
       setReport(reportData);
+      setPreviousReport(previousData);
       setDebts(debtData.debts);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load report");
@@ -72,14 +69,14 @@ export default function ReportsPage() {
     })();
   }, [fetchReport]);
 
-  const chartData =
-    report?.dailyTotals.map((d) => ({
-      date: d.date.slice(8),
-      Income: d.income,
-      Expense: d.expense,
-      Saving: d.saving,
-      Investment: d.investment,
-    })) ?? [];
+  const buckets = report ? fillDailyBuckets(month, report.dailyTotals) : [];
+  const hasActivity = (report?.dailyTotals.length ?? 0) > 0;
+  const isCurrentMonth = month === currentMonth();
+  const elapsedDays = isCurrentMonth ? new Date().getDate() : daysInMonth(month);
+  const previousMonth = navigateMonth(month, -1);
+  const previousHasData = previousReport != null && previousReport.dailyTotals.length > 0;
+  const debtsTaken = debts.filter((d) => d.type === "TAKEN");
+  const debtsGiven = debts.filter((d) => d.type === "GIVEN");
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
@@ -123,45 +120,50 @@ export default function ReportsPage() {
 
       {isLoading ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-24 rounded-2xl bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
-            ))}
-          </div>
-          <div className="h-60 rounded-2xl bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+          <div className="h-36 rounded-2xl bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-56 rounded-2xl bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+          ))}
         </div>
       ) : error ? (
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : report ? (
         <div className="space-y-6">
-          <ReportSummaryCards
-            totalIncome={report.totalIncome}
-            totalExpense={report.totalExpense}
-            totalSaving={report.totalSaving}
-            totalInvestment={report.totalInvestment}
+          <NetBalanceBanner
             netBalance={report.netBalance}
+            label={monthLabel(month)}
+            comparison={{
+              previous: previousHasData ? previousReport.netBalance : null,
+              label: monthLabel(previousMonth),
+            }}
           />
 
-          {chartData.length > 0 ? (
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-              <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-4">Daily Trend</h2>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} width={50} tickFormatter={(v) => `₹${v}`} />
-                  <Tooltip
-                    formatter={(value) => [typeof value === "number" ? formatCurrency(value) : String(value), ""]}
-                    contentStyle={{ fontSize: 12 }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="Income" fill="#10b981" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="Expense" fill="#f87171" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="Saving" fill="#3b82f6" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="Investment" fill="#a855f7" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+          <MoneyFlowCard
+            income={report.totalIncome}
+            expense={report.totalExpense}
+            saving={report.totalSaving}
+            investment={report.totalInvestment}
+          />
+
+          {hasActivity ? (
+            <>
+              <div className="space-y-6">
+                <PeriodComparisonCard
+                  current={report}
+                  previous={previousHasData ? previousReport : null}
+                  previousLabel={monthLabel(previousMonth)}
+                />
+                <InsightsCard
+                  mode="month"
+                  totals={report}
+                  categoryBreakdown={report.categoryBreakdown}
+                  buckets={buckets}
+                  elapsed={elapsedDays}
+                  projectDays={isCurrentMonth ? daysInMonth(month) : undefined}
+                />
+              </div>
+              <TrendChart mode="month" buckets={buckets} elapsed={elapsedDays} />
+            </>
           ) : (
             <div className="rounded-2xl border-2 border-dashed border-zinc-200 dark:border-zinc-800 p-10 text-center">
               <p className="text-sm text-zinc-400 dark:text-zinc-500">No transaction data for this month.</p>
@@ -174,34 +176,11 @@ export default function ReportsPage() {
             onTransactionCreated={() => void fetchReport()}
           />
 
-          {/* Debt Summary */}
-          <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-4">Active Debts</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                  Debt Taken
-                </p>
-                <p className="text-xl font-bold text-red-600 dark:text-red-400">
-                  {formatCurrency(debts.filter(d => d.type === "TAKEN").reduce((sum, d) => sum + d.outstanding, 0))}
-                </p>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  {debts.filter(d => d.type === "TAKEN").length} debt{debts.filter(d => d.type === "TAKEN").length !== 1 ? "s" : ""}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                  Debt Given
-                </p>
-                <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(debts.filter(d => d.type === "GIVEN").reduce((sum, d) => sum + d.outstanding, 0))}
-                </p>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  {debts.filter(d => d.type === "GIVEN").length} debt{debts.filter(d => d.type === "GIVEN").length !== 1 ? "s" : ""}
-                </p>
-              </div>
-            </div>
-          </div>
+          <DebtsCard
+            taken={debtsTaken.reduce((sum, d) => sum + d.outstanding, 0)}
+            given={debtsGiven.reduce((sum, d) => sum + d.outstanding, 0)}
+            subtitle={`${debtsTaken.length} taken · ${debtsGiven.length} given (active)`}
+          />
         </div>
       ) : null}
     </div>

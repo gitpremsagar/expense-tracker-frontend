@@ -1,26 +1,18 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
 import { useAuth } from "../../../../lib/auth-context";
 import { getAnnualReport, type AnnualReport } from "../../../../lib/api";
 import {
   CategoryBreakdownGrid,
-  ReportSummaryCards,
+  InsightsCard,
+  MonthlyBreakdownTable,
+  PeriodComparisonCard,
   ReportViewToggle,
-  formatCurrency,
+  TrendChart,
+  fillMonthlyBuckets,
 } from "../../../../components/ReportWidgets";
-
-const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+import { MoneyFlowCard, NetBalanceBanner } from "../../../../components/MoneyFlow";
 
 function currentYear() {
   return new Date().getFullYear();
@@ -30,14 +22,19 @@ export default function AnnualReportPage() {
   const { accessToken } = useAuth();
   const [year, setYear] = useState(currentYear());
   const [report, setReport] = useState<AnnualReport | null>(null);
+  const [previousReport, setPreviousReport] = useState<AnnualReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchReport = useCallback(async () => {
     if (!accessToken) return;
     try {
-      const data = await getAnnualReport(year, accessToken);
+      const [data, previousData] = await Promise.all([
+        getAnnualReport(year, accessToken),
+        getAnnualReport(year - 1, accessToken).catch(() => null),
+      ]);
       setReport(data);
+      setPreviousReport(previousData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load report");
     } finally {
@@ -53,17 +50,13 @@ export default function AnnualReportPage() {
     })();
   }, [fetchReport]);
 
-  const hasActivity =
-    report?.monthlyTotals.some((m) => m.income + m.expense + m.saving + m.investment > 0) ?? false;
+  const hasActivityIn = (r: AnnualReport | null) =>
+    r?.monthlyTotals.some((m) => m.income + m.expense + m.saving + m.investment > 0) ?? false;
 
-  const chartData =
-    report?.monthlyTotals.map((m) => ({
-      month: MONTH_LABELS[parseInt(m.month.slice(5), 10) - 1] ?? m.month,
-      Income: m.income,
-      Expense: m.expense,
-      Saving: m.saving,
-      Investment: m.investment,
-    })) ?? [];
+  const hasActivity = hasActivityIn(report);
+  const previousHasData = hasActivityIn(previousReport);
+  const buckets = report ? fillMonthlyBuckets(year, report.monthlyTotals) : [];
+  const elapsedMonths = year === currentYear() ? new Date().getMonth() + 1 : 12;
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
@@ -112,45 +105,51 @@ export default function AnnualReportPage() {
 
       {isLoading ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-24 rounded-2xl bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
-            ))}
-          </div>
-          <div className="h-60 rounded-2xl bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+          <div className="h-36 rounded-2xl bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-56 rounded-2xl bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+          ))}
         </div>
       ) : error ? (
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : report ? (
         <div className="space-y-6">
-          <ReportSummaryCards
-            totalIncome={report.totalIncome}
-            totalExpense={report.totalExpense}
-            totalSaving={report.totalSaving}
-            totalInvestment={report.totalInvestment}
+          <NetBalanceBanner
             netBalance={report.netBalance}
+            label={String(year)}
+            comparison={{
+              previous: previousHasData && previousReport ? previousReport.netBalance : null,
+              label: String(year - 1),
+            }}
+          />
+
+          <MoneyFlowCard
+            income={report.totalIncome}
+            expense={report.totalExpense}
+            saving={report.totalSaving}
+            investment={report.totalInvestment}
+            subtitle="How this year's income was used"
           />
 
           {hasActivity ? (
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-              <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-4">Monthly Trend</h2>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} width={50} tickFormatter={(v) => `₹${v}`} />
-                  <Tooltip
-                    formatter={(value) => [typeof value === "number" ? formatCurrency(value) : String(value), ""]}
-                    contentStyle={{ fontSize: 12 }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="Income" fill="#10b981" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="Expense" fill="#f87171" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="Saving" fill="#3b82f6" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="Investment" fill="#a855f7" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <>
+              <div className="space-y-6">
+                <PeriodComparisonCard
+                  current={report}
+                  previous={previousHasData ? previousReport : null}
+                  previousLabel={String(year - 1)}
+                />
+                <InsightsCard
+                  mode="year"
+                  totals={report}
+                  categoryBreakdown={report.categoryBreakdown}
+                  buckets={buckets}
+                  elapsed={elapsedMonths}
+                />
+              </div>
+              <TrendChart mode="year" buckets={buckets} elapsed={elapsedMonths} />
+              <MonthlyBreakdownTable buckets={buckets} />
+            </>
           ) : (
             <div className="rounded-2xl border-2 border-dashed border-zinc-200 dark:border-zinc-800 p-10 text-center">
               <p className="text-sm text-zinc-400 dark:text-zinc-500">No transaction data for this year.</p>
