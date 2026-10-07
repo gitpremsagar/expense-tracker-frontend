@@ -328,6 +328,20 @@ export type Debt = {
   userId: string;
   createdAt: string;
   updatedAt: string;
+  paidAmount: number;
+  outstanding: number;
+  payments?: DebtPayment[];
+};
+
+export type DebtPayment = {
+  id: string;
+  amount: number;
+  date: string;
+  note: string | null;
+  debtId: string;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type DebtPagination = {
@@ -403,6 +417,45 @@ export async function deleteDebt(id: string, accessToken: string): Promise<void>
     method: "DELETE",
     accessToken,
   });
+}
+
+export async function addDebtPayment(
+  debtId: string,
+  input: { amount: number; date?: string; note?: string },
+  accessToken: string,
+): Promise<Debt> {
+  const res = await apiFetch<{ debt: Debt }>(`/debts/${debtId}/payments`, {
+    method: "POST",
+    body: JSON.stringify(input),
+    accessToken,
+  });
+  return res.debt;
+}
+
+export async function updateDebtPayment(
+  debtId: string,
+  paymentId: string,
+  input: { amount?: number; date?: string; note?: string | null },
+  accessToken: string,
+): Promise<Debt> {
+  const res = await apiFetch<{ debt: Debt }>(`/debts/${debtId}/payments/${paymentId}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+    accessToken,
+  });
+  return res.debt;
+}
+
+export async function deleteDebtPayment(
+  debtId: string,
+  paymentId: string,
+  accessToken: string,
+): Promise<Debt> {
+  const res = await apiFetch<{ debt: Debt }>(`/debts/${debtId}/payments/${paymentId}`, {
+    method: "DELETE",
+    accessToken,
+  });
+  return res.debt;
 }
 
 // ─── Reports ──────────────────────────────────────────────────────────────────

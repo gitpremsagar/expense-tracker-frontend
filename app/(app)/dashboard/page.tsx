@@ -167,7 +167,7 @@ export default function DashboardPage() {
           />
           <StatCard
             label="Debt Taken"
-            value={formatCurrency(debts.filter(d => d.type === "TAKEN").reduce((sum, d) => sum + d.amount, 0))}
+            value={formatCurrency(debts.filter(d => d.type === "TAKEN").reduce((sum, d) => sum + d.outstanding, 0))}
             color="red"
             icon={
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -177,7 +177,7 @@ export default function DashboardPage() {
           />
           <StatCard
             label="Debt Given"
-            value={formatCurrency(debts.filter(d => d.type === "GIVEN").reduce((sum, d) => sum + d.amount, 0))}
+            value={formatCurrency(debts.filter(d => d.type === "GIVEN").reduce((sum, d) => sum + d.outstanding, 0))}
             color="green"
             icon={
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

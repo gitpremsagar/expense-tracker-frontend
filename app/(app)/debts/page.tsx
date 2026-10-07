@@ -201,11 +201,19 @@ export default function DebtsPage() {
                       {TYPE_LABEL[debt.type]} · {formatDate(debt.date)} · {STATUS_LABEL[debt.status]}
                     </p>
                   </div>
-                  <span
-                    className={`text-sm font-semibold tabular-nums ${typeAmountClass(debt.type)}`}
-                  >
-                    {formatAmount(debt.amount)}
-                  </span>
+                  <div className="text-right">
+                    <span
+                      className={`text-sm font-semibold tabular-nums ${typeAmountClass(debt.type)}`}
+                    >
+                      {formatAmount(debt.outstanding)}
+                    </span>
+                    {debt.paidAmount > 0 && (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
+                        {formatAmount(debt.paidAmount)} of {formatAmount(debt.amount)}{" "}
+                        {debt.type === "TAKEN" ? "paid" : "received"}
+                      </p>
+                    )}
+                  </div>
                 </Link>
                 <div className="flex items-center gap-2 ml-1">
                   <Link

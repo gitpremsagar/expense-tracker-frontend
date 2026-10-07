@@ -183,7 +183,7 @@ export default function ReportsPage() {
                   Debt Taken
                 </p>
                 <p className="text-xl font-bold text-red-600 dark:text-red-400">
-                  {formatCurrency(debts.filter(d => d.type === "TAKEN").reduce((sum, d) => sum + d.amount, 0))}
+                  {formatCurrency(debts.filter(d => d.type === "TAKEN").reduce((sum, d) => sum + d.outstanding, 0))}
                 </p>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                   {debts.filter(d => d.type === "TAKEN").length} debt{debts.filter(d => d.type === "TAKEN").length !== 1 ? "s" : ""}
@@ -194,7 +194,7 @@ export default function ReportsPage() {
                   Debt Given
                 </p>
                 <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(debts.filter(d => d.type === "GIVEN").reduce((sum, d) => sum + d.amount, 0))}
+                  {formatCurrency(debts.filter(d => d.type === "GIVEN").reduce((sum, d) => sum + d.outstanding, 0))}
                 </p>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                   {debts.filter(d => d.type === "GIVEN").length} debt{debts.filter(d => d.type === "GIVEN").length !== 1 ? "s" : ""}
