@@ -542,6 +542,7 @@ export type DailyTotalItem = {
   expense: number;
   saving: number;
   investment: number;
+  debtRepayment: number;
 };
 
 export type MonthlyReport = {
@@ -550,6 +551,7 @@ export type MonthlyReport = {
   totalExpense: number;
   totalSaving: number;
   totalInvestment: number;
+  totalDebtRepayment: number;
   netBalance: number;
   categoryBreakdown: CategoryBreakdownItem[];
   groupBreakdown: GroupBreakdownItem[];
@@ -570,6 +572,7 @@ export type MonthlyTotalItem = {
   expense: number;
   saving: number;
   investment: number;
+  debtRepayment: number;
 };
 
 export type AnnualReport = {
@@ -578,6 +581,7 @@ export type AnnualReport = {
   totalExpense: number;
   totalSaving: number;
   totalInvestment: number;
+  totalDebtRepayment: number;
   netBalance: number;
   categoryBreakdown: CategoryBreakdownItem[];
   groupBreakdown: GroupBreakdownItem[];

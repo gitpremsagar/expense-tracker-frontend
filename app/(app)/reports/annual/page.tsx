@@ -128,6 +128,7 @@ export default function AnnualReportPage() {
             expense={report.totalExpense}
             saving={report.totalSaving}
             investment={report.totalInvestment}
+            debtRepayment={report.totalDebtRepayment}
             subtitle="How this year's income was used"
           />
 

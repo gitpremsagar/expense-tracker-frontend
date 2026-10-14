@@ -143,6 +143,7 @@ export default function ReportsPage() {
             expense={report.totalExpense}
             saving={report.totalSaving}
             investment={report.totalInvestment}
+            debtRepayment={report.totalDebtRepayment}
           />
 
           {hasActivity ? (

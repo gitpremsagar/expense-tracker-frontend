@@ -144,6 +144,7 @@ export default function DashboardPage() {
             expense={report.totalExpense}
             saving={report.totalSaving}
             investment={report.totalInvestment}
+            debtRepayment={report.totalDebtRepayment}
           />
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <TopExpensesCard report={report} />

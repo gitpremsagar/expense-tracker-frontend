@@ -280,6 +280,7 @@ export type PeriodTotals = {
   totalExpense: number;
   totalSaving: number;
   totalInvestment: number;
+  totalDebtRepayment: number;
   netBalance: number;
 };
 
@@ -290,6 +291,7 @@ export type TrendBucket = {
   expense: number;
   saving: number;
   investment: number;
+  debtRepayment: number;
 };
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -312,6 +314,7 @@ export function fillDailyBuckets(month: string, dailyTotals: DailyTotalItem[]): 
       expense: d?.expense ?? 0,
       saving: d?.saving ?? 0,
       investment: d?.investment ?? 0,
+      debtRepayment: d?.debtRepayment ?? 0,
     };
   });
 }
@@ -327,12 +330,13 @@ export function fillMonthlyBuckets(year: number, monthlyTotals: MonthlyTotalItem
       expense: m?.expense ?? 0,
       saving: m?.saving ?? 0,
       investment: m?.investment ?? 0,
+      debtRepayment: m?.debtRepayment ?? 0,
     };
   });
 }
 
 function outflowOf(b: TrendBucket) {
-  return b.expense + b.saving + b.investment;
+  return b.expense + b.saving + b.investment + b.debtRepayment;
 }
 
 type ChangeSense = "higherIsGood" | "higherIsBad" | "neutral";
@@ -357,6 +361,7 @@ export function PeriodComparisonCard({
     { label: "Expense", key: "totalExpense", sense: "higherIsBad" },
     { label: "Savings", key: "totalSaving", sense: "neutral" },
     { label: "Investments", key: "totalInvestment", sense: "neutral" },
+    { label: "Debt repayment", key: "totalDebtRepayment", sense: "neutral" },
     { label: "Net balance", key: "netBalance", sense: "higherIsGood", signed: true },
   ];
 
@@ -538,6 +543,7 @@ const SERIES_COLORS = {
   expense: "#f87171",
   saving: "#3b82f6",
   investment: "#a855f7",
+  debtRepayment: "#f97316",
 };
 
 function compactCurrency(value: number) {
@@ -575,6 +581,7 @@ export function TrendChart({
       Expense: b.expense,
       Saving: b.saving,
       Investment: b.investment,
+      "Debt repayment": b.debtRepayment,
       "Cumulative income": isFuture ? null : +cumIncome.toFixed(2),
       "Cumulative outflow": isFuture ? null : +cumOutflow.toFixed(2),
       Net: isFuture || isEmpty ? null : +(b.income - outflowOf(b)).toFixed(2),
@@ -632,7 +639,8 @@ export function TrendChart({
           <ChartBar dataKey="Income" fill={SERIES_COLORS.income} radius={[3, 3, 0, 0]} />
           <ChartBar dataKey="Expense" stackId="out" fill={SERIES_COLORS.expense} />
           <ChartBar dataKey="Saving" stackId="out" fill={SERIES_COLORS.saving} />
-          <ChartBar dataKey="Investment" stackId="out" fill={SERIES_COLORS.investment} radius={[3, 3, 0, 0]} />
+          <ChartBar dataKey="Investment" stackId="out" fill={SERIES_COLORS.investment} />
+          <ChartBar dataKey="Debt repayment" stackId="out" fill={SERIES_COLORS.debtRepayment} radius={[3, 3, 0, 0]} />
           {mode === "month" ? (
             <>
               <Line type="monotone" dataKey="Cumulative income" stroke="#34d399" strokeWidth={2} dot={false} />

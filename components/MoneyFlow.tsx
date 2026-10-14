@@ -81,15 +81,17 @@ export function MoneyFlowCard({
   expense,
   saving,
   investment,
+  debtRepayment,
   subtitle = "How this month's income was used",
 }: {
   income: number;
   expense: number;
   saving: number;
   investment: number;
+  debtRepayment: number;
   subtitle?: string;
 }) {
-  const outflow = expense + saving + investment;
+  const outflow = expense + saving + investment + debtRepayment;
   const scale = Math.max(income, outflow);
   const overspent = outflow - income;
 
@@ -98,6 +100,7 @@ export function MoneyFlowCard({
     { label: "Expense", value: expense, dot: "bg-red-500", pct: percentOf(expense, income) },
     { label: "Savings", value: saving, dot: "bg-blue-500", pct: percentOf(saving, income) },
     { label: "Investments", value: investment, dot: "bg-purple-500", pct: percentOf(investment, income) },
+    { label: "Debt repayment", value: debtRepayment, dot: "bg-orange-500", pct: percentOf(debtRepayment, income) },
   ];
 
   return (
@@ -139,11 +142,12 @@ export function MoneyFlowCard({
             <Bar value={expense} scale={scale} className="bg-red-500" />
             <Bar value={saving} scale={scale} className="bg-blue-500" />
             <Bar value={investment} scale={scale} className="bg-purple-500" />
+            <Bar value={debtRepayment} scale={scale} className="bg-orange-500" />
           </div>
         </div>
       </div>
 
-      <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
         {legend.map((item) => (
           <li key={item.label} className="rounded-xl bg-zinc-50 px-3 py-2 dark:bg-zinc-800/50">
             <div className="flex items-center gap-1.5">
