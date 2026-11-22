@@ -11,6 +11,7 @@ export type AuthUser = {
 
 export type AuthResponse = {
   accessToken: string;
+  refreshToken?: string;
   user: AuthUser;
 };
 
@@ -157,6 +158,60 @@ export async function refreshSession(): Promise<AuthResponse | null> {
   return (await response.json()) as AuthResponse;
 }
 
+export async function forgotPasswordRequest(email: string): Promise<{
+  message: string;
+  delivered: boolean;
+  devResetUrl?: string;
+}> {
+  return apiFetch<{ message: string; delivered: boolean; devResetUrl?: string }>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+    skipAuthRetry: true,
+  });
+}
+
+export async function resetPasswordRequest(input: {
+  token: string;
+  password: string;
+}): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify(input),
+    skipAuthRetry: true,
+  });
+}
+
+export async function updateProfileRequest(input: {
+  name?: string;
+  email?: string;
+}): Promise<{ user: AuthUser }> {
+  return apiFetch<{ user: AuthUser }>("/auth/me", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function changePasswordRequest(input: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function logoutAllRequest(): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>("/auth/logout-all", { method: "POST" });
+}
+
+export async function deleteAccountRequest(password: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>("/auth/me", {
+    method: "DELETE",
+    body: JSON.stringify({ password }),
+  });
+}
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export type CategoryType = "INCOME" | "EXPENSE" | "SAVING" | "INVESTMENT";
@@ -211,6 +266,15 @@ export async function updateCategory(
 export async function deleteCategory(id: string, accessToken: string): Promise<void> {
   await apiFetch<{ message: string }>(`/categories/${id}`, {
     method: "DELETE",
+    accessToken,
+  });
+}
+
+export async function addStarterCategories(
+  accessToken: string,
+): Promise<{ created: number }> {
+  return apiFetch<{ created: number }>("/categories/starter", {
+    method: "POST",
     accessToken,
   });
 }
@@ -458,7 +522,7 @@ export async function getDebt(id: string, accessToken: string): Promise<Debt> {
 
 export async function updateDebt(
   id: string,
-  input: { type?: DebtType; partyName?: string; amount?: number; description?: string | null; date?: string; status?: DebtStatus },
+  input: { type?: DebtType; partyName?: string; amount?: number; description?: string | null; date?: string },
   accessToken: string,
 ): Promise<Debt> {
   const res = await apiFetch<{ debt: Debt }>(`/debts/${id}`, {
@@ -515,6 +579,63 @@ export async function deleteDebtPayment(
   return res.debt;
 }
 
+// ─── Budgets ──────────────────────────────────────────────────────────────────
+
+export type BudgetItem = {
+  id: string;
+  month: string;
+  scope: string;
+  amount: number;
+  spent: number;
+  remaining: number;
+  percentage: number;
+  overBudget: boolean;
+  categoryId: string | null;
+  categoryName: string;
+};
+
+export type BudgetSummary = {
+  totalBudget: number | null;
+  totalSpent: number;
+  remaining: number | null;
+  percentage: number | null;
+  overBudget: boolean;
+};
+
+export type BudgetsResult = {
+  month: string;
+  budgets: BudgetItem[];
+  summary: BudgetSummary;
+};
+
+export async function listBudgets(
+  month: string,
+  accessToken: string,
+): Promise<BudgetsResult> {
+  return apiFetch<BudgetsResult>(`/budgets?month=${month}`, {
+    method: "GET",
+    accessToken,
+  });
+}
+
+export async function upsertBudget(
+  input: { month: string; scope: string; amount: number },
+  accessToken: string,
+): Promise<{ budget: { id: string } }> {
+  return apiFetch<{ budget: { id: string } }>("/budgets", {
+    method: "PUT",
+    body: JSON.stringify(input),
+    accessToken,
+  });
+}
+
+export async function deleteBudget(id: string, accessToken: string): Promise<void> {
+  await apiFetch<{ message: string }>(`/budgets/${id}`, {
+    method: "DELETE",
+    accessToken,
+  });
+}
+
 // ─── Reports ──────────────────────────────────────────────────────────────────
 
 export type CategoryBreakdownItem = {
@@ -543,6 +664,7 @@ export type DailyTotalItem = {
   saving: number;
   investment: number;
   debtRepayment: number;
+  debtRecovery: number;
 };
 
 export type MonthlyReport = {
@@ -552,6 +674,7 @@ export type MonthlyReport = {
   totalSaving: number;
   totalInvestment: number;
   totalDebtRepayment: number;
+  totalDebtRecovery: number;
   netBalance: number;
   categoryBreakdown: CategoryBreakdownItem[];
   groupBreakdown: GroupBreakdownItem[];
@@ -573,6 +696,7 @@ export type MonthlyTotalItem = {
   saving: number;
   investment: number;
   debtRepayment: number;
+  debtRecovery: number;
 };
 
 export type AnnualReport = {
@@ -582,6 +706,7 @@ export type AnnualReport = {
   totalSaving: number;
   totalInvestment: number;
   totalDebtRepayment: number;
+  totalDebtRecovery: number;
   netBalance: number;
   categoryBreakdown: CategoryBreakdownItem[];
   groupBreakdown: GroupBreakdownItem[];

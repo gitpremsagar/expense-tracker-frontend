@@ -102,8 +102,9 @@ export default function ReportsPage() {
         <input
           type="month"
           value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 outline-none ring-emerald-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          max={currentMonth()}
+          onChange={(e) => e.target.value && setMonth(e.target.value)}
+          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 outline-none ring-emerald-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
         />
         <button
           type="button"
@@ -144,6 +145,7 @@ export default function ReportsPage() {
             saving={report.totalSaving}
             investment={report.totalInvestment}
             debtRepayment={report.totalDebtRepayment}
+            debtRecovery={report.totalDebtRecovery}
           />
 
           {hasActivity ? (

@@ -12,6 +12,7 @@ import {
   type DebtPagination,
 } from "../../../lib/api";
 import ConfirmDialog from "../../../components/ConfirmDialog";
+import { useToast } from "../../../components/ToastProvider";
 
 const TYPE_LABEL: Record<DebtType, string> = {
   TAKEN: "Taken",
@@ -31,7 +32,7 @@ function typeIconClass(type: DebtType) {
 
 function typeAmountClass(type: DebtType) {
   return type === "GIVEN"
-    ? "text-emerald-600 dark:text-emerald-400"
+    ? "text-emerald-700 dark:text-emerald-400"
     : "text-red-600 dark:text-red-400";
 }
 
@@ -57,6 +58,7 @@ function formatDate(dateStr: string) {
 
 export default function DebtsPage() {
   const { accessToken } = useAuth();
+  const { showToast } = useToast();
   const [debts, setDebts] = useState<Debt[]>([]);
   const [pagination, setPagination] = useState<DebtPagination | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -107,8 +109,9 @@ export default function DebtsPage() {
         setPagination({ ...pagination, total: pagination.total - 1 });
       }
       setPendingDeleteId(null);
+      showToast("Debt deleted");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete debt");
+      showToast(err instanceof Error ? err.message : "Failed to delete debt", { tone: "error" });
     } finally {
       setDeletingId(null);
     }
@@ -127,7 +130,7 @@ export default function DebtsPage() {
         </div>
         <Link
           href="/debts/new"
-          className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700"
+          className="flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-800"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -171,7 +174,7 @@ export default function DebtsPage() {
           <p className="text-zinc-500 dark:text-zinc-400 text-sm">No debts found.</p>
           <Link
             href="/debts/new"
-            className="mt-3 inline-block text-sm text-emerald-600 underline dark:text-emerald-400"
+            className="mt-3 inline-block text-sm text-emerald-700 underline dark:text-emerald-400"
           >
             Add your first debt
           </Link>

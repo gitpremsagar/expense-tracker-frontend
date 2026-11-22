@@ -1,5 +1,7 @@
 "use client";
 
+import { useFocusTrap } from "../lib/useFocusTrap";
+
 type Props = {
   open: boolean;
   title: string;
@@ -19,6 +21,8 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: Props) {
+  const containerRef = useFocusTrap(open, onCancel);
+
   if (!open) return null;
 
   return (
@@ -31,10 +35,12 @@ export default function ConfirmDialog({
         disabled={isConfirming}
       />
       <div
+        ref={containerRef}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-title"
         aria-describedby="confirm-message"
+        tabIndex={-1}
         className="relative w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900"
       >
         <h2 id="confirm-title" className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">

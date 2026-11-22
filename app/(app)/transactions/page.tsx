@@ -6,6 +6,7 @@ import { useAuth } from "../../../lib/auth-context";
 import {
   listTransactions,
   listCategories,
+  createTransaction,
   deleteTransaction,
   type Transaction,
   type Category,
@@ -13,6 +14,7 @@ import {
 } from "../../../lib/api";
 import ConfirmDialog from "../../../components/ConfirmDialog";
 import { EditTransactionSheet } from "../../../components/EditTransactionSheet";
+import { useToast } from "../../../components/ToastProvider";
 
 const TYPE_LABEL: Record<CategoryType, string> = {
   INCOME: "Income",
@@ -55,7 +57,7 @@ function typeIconClass(type: CategoryType) {
 function typeAmountClass(type: CategoryType) {
   switch (type) {
     case "INCOME":
-      return "text-emerald-600 dark:text-emerald-400";
+      return "text-emerald-700 dark:text-emerald-400";
     case "EXPENSE":
       return "text-red-600 dark:text-red-400";
     case "SAVING":
@@ -130,6 +132,7 @@ const compactInputClass =
 
 export default function TransactionsPage() {
   const { accessToken } = useAuth();
+  const { showToast } = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -222,6 +225,7 @@ export default function TransactionsPage() {
     setCategoryFilter("");
     setMinAmount("");
     setMaxAmount("");
+    setSearchInput("");
   }
 
   function handleTypeChange(value: CategoryType | "") {
@@ -277,16 +281,81 @@ export default function TransactionsPage() {
 
   async function handleDelete(id: string) {
     if (!accessToken) return;
+    const deleted = transactions.find((transaction) => transaction.id === id);
     setDeletingId(id);
     try {
       await deleteTransaction(id, accessToken);
       setTransactions((prev) => prev.filter((t) => t.id !== id));
       setPendingDeleteId(null);
+      if (deleted) {
+        showToast("Transaction deleted", {
+          action: {
+            label: "Undo",
+            onClick: async () => {
+              try {
+                await createTransaction(
+                  {
+                    amount: deleted.amount,
+                    ...(deleted.note ? { note: deleted.note } : {}),
+                    categoryId: deleted.categoryId,
+                    date: deleted.date,
+                  },
+                  accessToken,
+                );
+                await fetchTransactions();
+                showToast("Transaction restored");
+              } catch (error) {
+                showToast(
+                  error instanceof Error ? error.message : "Could not restore transaction",
+                  { tone: "error" },
+                );
+              }
+            },
+          },
+        });
+      }
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete transaction");
+      showToast(err instanceof Error ? err.message : "Failed to delete transaction", {
+        tone: "error",
+      });
     } finally {
       setDeletingId(null);
     }
+  }
+
+  function exportCsv() {
+    if (visibleTransactions.length === 0) {
+      showToast("There is nothing to export in this view", { tone: "info" });
+      return;
+    }
+
+    const escape = (value: string) => {
+      // Prevent spreadsheet formula injection from note/category text.
+      const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
+    const rows = [
+      ["Date", "Type", "Category", "Amount (INR)", "Note"],
+      ...visibleTransactions.map((tx) => [
+        new Date(tx.date).toLocaleString("en-IN"),
+        tx.type,
+        tx.category.name,
+        tx.amount.toFixed(2),
+        tx.note ?? "",
+      ]),
+    ];
+
+    const csv = rows.map((row) => row.map((cell) => escape(String(cell))).join(",")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `money-tracker-365-${fromDate || "all"}-to-${toDate || "all"}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${visibleTransactions.length} transactions`);
   }
 
   return (
@@ -300,15 +369,27 @@ export default function TransactionsPage() {
             </span>
           )}
         </div>
-        <Link
-          href="/transactions/new"
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Add
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="hidden items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 sm:flex dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v12m0 0l-4-4m4 4l4-4" />
+            </svg>
+            Export
+          </button>
+          <Link
+            href="/transactions/new"
+            className="flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-emerald-800"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
@@ -377,7 +458,7 @@ export default function TransactionsPage() {
           </svg>
           <span className="hidden sm:inline">Filters</span>
           {activeFilterCount > 0 && (
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-xs font-semibold text-white">
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-700 px-1.5 text-xs font-semibold text-white">
               {activeFilterCount}
             </span>
           )}
@@ -473,7 +554,7 @@ export default function TransactionsPage() {
               <button
                 type="button"
                 onClick={() => setFiltersOpen(false)}
-                className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700"
+                className="rounded-lg bg-emerald-700 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-800"
               >
                 Done
               </button>
@@ -508,7 +589,7 @@ export default function TransactionsPage() {
           <p className="text-zinc-500 dark:text-zinc-400 text-sm">No transactions match your filters.</p>
           <Link
             href="/transactions/new"
-            className="mt-3 inline-block text-sm text-emerald-600 underline dark:text-emerald-400"
+            className="mt-3 inline-block text-sm text-emerald-700 underline dark:text-emerald-400"
           >
             Add your first transaction
           </Link>
@@ -550,6 +631,7 @@ export default function TransactionsPage() {
                     onClick={() => setEditing(tx)}
                     className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
                     title="Edit"
+                    aria-label={`Edit ${tx.category.name} transaction`}
                   >
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -559,8 +641,9 @@ export default function TransactionsPage() {
                     type="button"
                     onClick={() => setPendingDeleteId(tx.id)}
                     disabled={deletingId === tx.id}
-                    className="text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-40"
+                    className="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-40"
                     title="Delete"
+                    aria-label={`Delete ${tx.category.name} transaction`}
                   >
                     {deletingId === tx.id ? (
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 inline-block" />

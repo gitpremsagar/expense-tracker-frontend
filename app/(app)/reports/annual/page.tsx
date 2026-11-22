@@ -51,7 +51,10 @@ export default function AnnualReportPage() {
   }, [fetchReport]);
 
   const hasActivityIn = (r: AnnualReport | null) =>
-    r?.monthlyTotals.some((m) => m.income + m.expense + m.saving + m.investment > 0) ?? false;
+    r?.monthlyTotals.some(
+      (m) =>
+        m.income + m.expense + m.saving + m.investment + m.debtRepayment + m.debtRecovery > 0,
+    ) ?? false;
 
   const hasActivity = hasActivityIn(report);
   const previousHasData = hasActivityIn(previousReport);
@@ -129,6 +132,7 @@ export default function AnnualReportPage() {
             saving={report.totalSaving}
             investment={report.totalInvestment}
             debtRepayment={report.totalDebtRepayment}
+            debtRecovery={report.totalDebtRecovery}
             subtitle="How this year's income was used"
           />
 

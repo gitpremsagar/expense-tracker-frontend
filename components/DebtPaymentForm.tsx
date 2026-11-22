@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useFocusTrap } from "../lib/useFocusTrap";
 import {
   addDebtPayment,
   updateDebtPayment,
@@ -8,6 +9,7 @@ import {
   type DebtPayment,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { useToast } from "./ToastProvider";
 
 function toLocalDatetimeValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -43,6 +45,7 @@ export default function DebtPaymentForm({
   onCancel: () => void;
 }) {
   const { accessToken } = useAuth();
+  const { showToast } = useToast();
   const maxAmount = Math.round((debt.outstanding + (payment?.amount ?? 0)) * 100) / 100;
 
   const [amount, setAmount] = useState(String(payment ? payment.amount : maxAmount));
@@ -84,6 +87,7 @@ export default function DebtPaymentForm({
             { amount: parsedAmount, date: isoDate, note: note.trim() || undefined },
             accessToken,
           );
+      showToast(payment ? "Payment updated" : "Payment recorded");
       onSaved(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -161,7 +165,7 @@ export default function DebtPaymentForm({
         <button
           type="submit"
           disabled={isSubmitting}
-          className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60"
+          className="flex-1 rounded-lg bg-emerald-700 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-800 disabled:opacity-60"
         >
           {isSubmitting ? "Saving…" : payment ? "Update" : "Save"}
         </button>
@@ -181,6 +185,8 @@ export function DebtPaymentSheet({
   onClose: () => void;
   onSaved: (debt: Debt) => void;
 }) {
+  const containerRef = useFocusTrap(true, onClose);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
@@ -205,9 +211,11 @@ export function DebtPaymentSheet({
         onClick={onClose}
       />
       <aside
+        ref={containerRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="debt-payment-sheet-title"
+        tabIndex={-1}
         className="relative flex h-full w-full max-w-md flex-col border-l border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
       >
         <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">

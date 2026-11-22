@@ -13,6 +13,7 @@ import {
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import ConfirmDialog from "./ConfirmDialog";
+import { useToast } from "./ToastProvider";
 
 function toLocalDatetimeValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -44,6 +45,7 @@ export default function TransactionForm({
   onDeleted,
 }: Props) {
   const { accessToken } = useAuth();
+  const { showToast } = useToast();
   const router = useRouter();
 
   const [type, setType] = useState<CategoryType>(transaction?.type ?? defaultType ?? "EXPENSE");
@@ -83,6 +85,12 @@ export default function TransactionForm({
   // Clear category when it does not belong to the selected type (create and edit)
   const categoryIdForType = filteredCategories.some((c) => c.id === categoryId) ? categoryId : "";
 
+  function setQuickDate(offsetDays: number) {
+    const next = new Date();
+    next.setDate(next.getDate() + offsetDays);
+    setDate(toLocalDatetimeValue(next));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!accessToken) return;
@@ -115,6 +123,7 @@ export default function TransactionForm({
           accessToken,
         );
       }
+      showToast(transaction ? "Transaction updated" : "Transaction added");
       if (onSuccess) {
         onSuccess();
       } else {
@@ -134,6 +143,7 @@ export default function TransactionForm({
     setError(null);
     try {
       await deleteTransaction(transaction.id, accessToken);
+      showToast("Transaction deleted");
       if (onDeleted) {
         setConfirmOpen(false);
         onDeleted();
@@ -161,6 +171,7 @@ export default function TransactionForm({
               key={t}
               type="button"
               onClick={() => setType(t)}
+              aria-pressed={type === t}
               className={`rounded-lg py-2.5 text-sm font-medium transition-colors border ${
                 type === t
                   ? t === "INCOME"
@@ -212,7 +223,7 @@ export default function TransactionForm({
         ) : filteredCategories.length === 0 ? (
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             No {type.toLowerCase()} categories found.{" "}
-            <a href="/categories" className="text-emerald-600 underline dark:text-emerald-400">
+            <a href="/categories" className="text-emerald-700 underline dark:text-emerald-400">
               Create one
             </a>
             .
@@ -246,8 +257,24 @@ export default function TransactionForm({
           value={date}
           onChange={(e) => setDate(e.target.value)}
           required
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none ring-emerald-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none ring-emerald-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
         />
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setQuickDate(0)}
+            className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickDate(-1)}
+            className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+          >
+            Yesterday
+          </button>
+        </div>
       </div>
 
       {/* Note */}
@@ -279,7 +306,7 @@ export default function TransactionForm({
         <button
           type="submit"
           disabled={isSubmitting || isDeleting}
-          className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60"
+          className="flex-1 rounded-lg bg-emerald-700 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-60"
         >
           {isSubmitting ? "Saving…" : transaction ? "Update" : "Add Transaction"}
         </button>

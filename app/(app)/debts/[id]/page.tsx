@@ -16,6 +16,7 @@ import {
 } from "../../../../lib/api";
 import ConfirmDialog from "../../../../components/ConfirmDialog";
 import { DebtPaymentSheet, paymentLabels } from "../../../../components/DebtPaymentForm";
+import { useToast } from "../../../../components/ToastProvider";
 
 const TYPE_LABEL: Record<DebtType, string> = {
   TAKEN: "Debt Taken",
@@ -41,7 +42,7 @@ function statusBadgeClass(status: DebtStatus) {
 
 function typeAmountClass(type: DebtType) {
   return type === "GIVEN"
-    ? "text-emerald-600 dark:text-emerald-400"
+    ? "text-emerald-700 dark:text-emerald-400"
     : "text-red-600 dark:text-red-400";
 }
 
@@ -67,6 +68,7 @@ function formatDateTime(dateStr: string) {
 export default function DebtDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { accessToken } = useAuth();
+  const { showToast } = useToast();
   const router = useRouter();
   const [debt, setDebt] = useState<Debt | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -84,8 +86,9 @@ export default function DebtDetailPage({ params }: { params: Promise<{ id: strin
     try {
       setDebt(await deleteDebtPayment(debt.id, paymentId, accessToken));
       setPendingDeletePaymentId(null);
+      showToast("Payment deleted");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete payment");
+      showToast(err instanceof Error ? err.message : "Failed to delete payment", { tone: "error" });
     } finally {
       setIsDeletingPayment(false);
     }
@@ -111,10 +114,11 @@ export default function DebtDetailPage({ params }: { params: Promise<{ id: strin
     setIsDeleting(true);
     try {
       await deleteDebt(debt.id, accessToken);
+      showToast("Debt deleted");
       router.push("/debts");
       router.refresh();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete debt");
+      showToast(err instanceof Error ? err.message : "Failed to delete debt", { tone: "error" });
       setIsDeleting(false);
       setConfirmOpen(false);
     }
@@ -216,7 +220,7 @@ export default function DebtDetailPage({ params }: { params: Promise<{ id: strin
             <div className="flex gap-3 pt-2">
               <Link
                 href={`/debts/${debt.id}/edit`}
-                className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-center text-sm font-medium text-white transition hover:bg-emerald-700"
+                className="flex-1 rounded-lg bg-emerald-700 py-2.5 text-center text-sm font-medium text-white transition hover:bg-emerald-800"
               >
                 Edit
               </Link>
@@ -243,7 +247,7 @@ export default function DebtDetailPage({ params }: { params: Promise<{ id: strin
               <button
                 type="button"
                 onClick={() => setPaymentSheet({})}
-                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700"
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-800"
               >
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />

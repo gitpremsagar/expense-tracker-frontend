@@ -180,7 +180,6 @@ export function CategoryBreakdown({
   items,
   title,
   color,
-  type,
   addLabel,
   onSelect,
   onAdd,
@@ -188,7 +187,6 @@ export function CategoryBreakdown({
   items: CategoryBreakdownItem[];
   title: string;
   color: string;
-  type: CategoryType;
   addLabel: string;
   onSelect: (item: CategoryBreakdownItem) => void;
   onAdd: () => void;
@@ -281,6 +279,7 @@ export type PeriodTotals = {
   totalSaving: number;
   totalInvestment: number;
   totalDebtRepayment: number;
+  totalDebtRecovery: number;
   netBalance: number;
 };
 
@@ -292,6 +291,7 @@ export type TrendBucket = {
   saving: number;
   investment: number;
   debtRepayment: number;
+  debtRecovery: number;
 };
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -302,11 +302,12 @@ export function daysInMonth(month: string) {
 }
 
 export function fillDailyBuckets(month: string, dailyTotals: DailyTotalItem[]): TrendBucket[] {
-  const [, mon] = month.split("-").map(Number);
-  const byDay = new Map(dailyTotals.map((d) => [parseInt(d.date.slice(8, 10), 10), d]));
+  const [year, mon] = month.split("-").map(Number);
+  const byDay = new Map(dailyTotals.map((d) => [d.date, d]));
   return Array.from({ length: daysInMonth(month) }, (_, i) => {
     const day = i + 1;
-    const d = byDay.get(day);
+    const key = `${year}-${String(mon).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const d = byDay.get(key);
     return {
       label: String(day),
       fullLabel: `${day} ${MONTH_SHORT[mon! - 1]}`,
@@ -315,6 +316,7 @@ export function fillDailyBuckets(month: string, dailyTotals: DailyTotalItem[]): 
       saving: d?.saving ?? 0,
       investment: d?.investment ?? 0,
       debtRepayment: d?.debtRepayment ?? 0,
+      debtRecovery: d?.debtRecovery ?? 0,
     };
   });
 }
@@ -331,6 +333,7 @@ export function fillMonthlyBuckets(year: number, monthlyTotals: MonthlyTotalItem
       saving: m?.saving ?? 0,
       investment: m?.investment ?? 0,
       debtRepayment: m?.debtRepayment ?? 0,
+      debtRecovery: m?.debtRecovery ?? 0,
     };
   });
 }
@@ -339,12 +342,16 @@ function outflowOf(b: TrendBucket) {
   return b.expense + b.saving + b.investment + b.debtRepayment;
 }
 
+function inflowOf(b: TrendBucket) {
+  return b.income + b.debtRecovery;
+}
+
 type ChangeSense = "higherIsGood" | "higherIsBad" | "neutral";
 
 function changeColor(change: number, sense: ChangeSense) {
   if (change === 0 || sense === "neutral") return "text-zinc-500 dark:text-zinc-400";
   const good = sense === "higherIsGood" ? change > 0 : change < 0;
-  return good ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400";
+  return good ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400";
 }
 
 export function PeriodComparisonCard({
@@ -362,6 +369,7 @@ export function PeriodComparisonCard({
     { label: "Savings", key: "totalSaving", sense: "neutral" },
     { label: "Investments", key: "totalInvestment", sense: "neutral" },
     { label: "Debt repayment", key: "totalDebtRepayment", sense: "neutral" },
+    { label: "Debt received", key: "totalDebtRecovery", sense: "higherIsGood" },
     { label: "Net balance", key: "netBalance", sense: "higherIsGood", signed: true },
   ];
 
@@ -385,6 +393,10 @@ export function PeriodComparisonCard({
               const prev = previous ? previous[row.key] : null;
               const change = prev == null ? null : cur - prev;
               const pct = prev == null || prev === 0 || change == null ? null : (change / Math.abs(prev)) * 100;
+              // A ₹111 base turning into ₹16k is "+14899%", which is noise.
+              // Only show a percentage when the base and result are meaningful.
+              const showPct =
+                pct != null && Math.abs(prev ?? 0) >= 1000 && Math.abs(pct) <= 999;
               return (
                 <tr key={row.key}>
                   <td className="py-2 text-zinc-700 dark:text-zinc-300">{row.label}</td>
@@ -406,7 +418,11 @@ export function PeriodComparisonCard({
                     ) : (
                       <>
                         {change > 0 ? "▲" : "▼"} {formatCurrency(change)}
-                        {pct != null && <span className="ml-1 text-xs">({Math.abs(pct).toFixed(0)}%)</span>}
+                        {showPct ? (
+                          <span className="ml-1 text-xs">({Math.abs(pct).toFixed(0)}%)</span>
+                        ) : prev === 0 && change > 0 ? (
+                          <span className="ml-1 text-xs">(new)</span>
+                        ) : null}
                       </>
                     )}
                   </td>
@@ -456,7 +472,8 @@ export function InsightsCard({
   projectDays?: number;
 }) {
   const { totalIncome: income, totalExpense: expense } = totals;
-  const savingsRate = income > 0 ? ((income - expense) / income) * 100 : null;
+  const savingsRate =
+    income > 0 ? ((totals.totalSaving + totals.totalInvestment) / income) * 100 : null;
   const expenseRatio = income > 0 ? (expense / income) * 100 : null;
   const unit = mode === "month" ? "day" : "month";
 
@@ -469,9 +486,9 @@ export function InsightsCard({
     null,
   );
 
-  const activeBuckets = buckets.filter((b) => b.income + outflowOf(b) > 0);
+  const activeBuckets = buckets.filter((b) => inflowOf(b) + outflowOf(b) > 0);
   const spendDays = buckets.slice(0, elapsed).filter((b) => b.expense > 0).length;
-  const deficitMonths = activeBuckets.filter((b) => b.income - outflowOf(b) < 0).length;
+  const deficitMonths = activeBuckets.filter((b) => inflowOf(b) - outflowOf(b) < 0).length;
   const avgDivisor = mode === "year" ? activeBuckets.length : elapsed;
   const avgSpend = avgDivisor > 0 ? expense / avgDivisor : 0;
 
@@ -483,7 +500,7 @@ export function InsightsCard({
         <InsightTile
           label="Savings rate"
           value={savingsRate == null ? "—" : `${savingsRate.toFixed(0)}%`}
-          detail="Income left after expenses"
+          detail="Income set aside for savings & investments"
           valueClass={savingsRate == null ? undefined : signedColor(savingsRate)}
         />
         <InsightTile
@@ -520,7 +537,7 @@ export function InsightsCard({
             label="Months in deficit"
             value={`${deficitMonths} / ${activeBuckets.length}`}
             detail="Out of months with activity"
-            valueClass={deficitMonths > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}
+            valueClass={deficitMonths > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}
           />
         )}
         {projectDays != null && (
@@ -540,6 +557,7 @@ export function InsightsCard({
 
 const SERIES_COLORS = {
   income: "#10b981",
+  debtRecovery: "#14b8a6",
   expense: "#f87171",
   saving: "#3b82f6",
   investment: "#a855f7",
@@ -552,6 +570,31 @@ function compactCurrency(value: number) {
   if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)}L`;
   if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}k`;
   return `${sign}₹${abs}`;
+}
+
+function buildTrendData(buckets: TrendBucket[], elapsed: number) {
+  let runningIn = 0;
+  let runningOut = 0;
+
+  return buckets.map((b, i) => {
+    runningIn += inflowOf(b);
+    runningOut += outflowOf(b);
+    const isFuture = i >= elapsed;
+    const isEmpty = inflowOf(b) + outflowOf(b) === 0;
+    return {
+      label: b.label,
+      fullLabel: b.fullLabel,
+      Income: b.income,
+      "Debt received": b.debtRecovery,
+      Expense: b.expense,
+      Saving: b.saving,
+      Investment: b.investment,
+      "Debt repayment": b.debtRepayment,
+      "Cumulative income": isFuture ? null : +runningIn.toFixed(2),
+      "Cumulative outflow": isFuture ? null : +runningOut.toFixed(2),
+      Net: isFuture || isEmpty ? null : +(inflowOf(b) - outflowOf(b)).toFixed(2),
+    };
+  });
 }
 
 export function TrendChart({
@@ -567,26 +610,7 @@ export function TrendChart({
   const gridColor = isDark ? "#27272a" : "#e5e7eb";
   const axisColor = isDark ? "#a1a1aa" : "#52525b";
 
-  let cumIncome = 0;
-  let cumOutflow = 0;
-  const data = buckets.map((b, i) => {
-    cumIncome += b.income;
-    cumOutflow += outflowOf(b);
-    const isFuture = i >= elapsed;
-    const isEmpty = b.income + outflowOf(b) === 0;
-    return {
-      label: b.label,
-      fullLabel: b.fullLabel,
-      Income: b.income,
-      Expense: b.expense,
-      Saving: b.saving,
-      Investment: b.investment,
-      "Debt repayment": b.debtRepayment,
-      "Cumulative income": isFuture ? null : +cumIncome.toFixed(2),
-      "Cumulative outflow": isFuture ? null : +cumOutflow.toFixed(2),
-      Net: isFuture || isEmpty ? null : +(b.income - outflowOf(b)).toFixed(2),
-    };
-  });
+  const data = buildTrendData(buckets, elapsed);
 
   const nets = data.map((d) => d.Net ?? 0);
   const maxNet = Math.max(...nets, 0);
@@ -637,6 +661,7 @@ export function TrendChart({
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <ChartBar dataKey="Income" fill={SERIES_COLORS.income} radius={[3, 3, 0, 0]} />
+          <ChartBar dataKey="Debt received" fill={SERIES_COLORS.debtRecovery} radius={[3, 3, 0, 0]} />
           <ChartBar dataKey="Expense" stackId="out" fill={SERIES_COLORS.expense} />
           <ChartBar dataKey="Saving" stackId="out" fill={SERIES_COLORS.saving} />
           <ChartBar dataKey="Investment" stackId="out" fill={SERIES_COLORS.investment} />
@@ -663,7 +688,10 @@ export function TrendChart({
 }
 
 export function MonthlyBreakdownTable({ buckets }: { buckets: TrendBucket[] }) {
-  const maxAbsNet = Math.max(...buckets.map((b) => Math.abs(b.income - outflowOf(b))), 0);
+  const maxAbsNet = Math.max(
+    ...buckets.map((b) => Math.abs(b.income + b.debtRecovery - outflowOf(b))),
+    0,
+  );
 
   return (
     <div className={cardClass}>
@@ -675,6 +703,7 @@ export function MonthlyBreakdownTable({ buckets }: { buckets: TrendBucket[] }) {
             <tr className="text-left text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               <th className="pb-2 font-medium">Month</th>
               <th className="pb-2 text-right font-medium">Income</th>
+              <th className="pb-2 text-right font-medium">Debt received</th>
               <th className="pb-2 text-right font-medium">Outflow</th>
               <th className="pb-2 text-right font-medium">Net</th>
               <th className="pb-2 text-right font-medium">Savings rate</th>
@@ -683,14 +712,17 @@ export function MonthlyBreakdownTable({ buckets }: { buckets: TrendBucket[] }) {
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {buckets.map((b) => {
               const outflow = outflowOf(b);
-              const net = b.income - outflow;
-              const isEmpty = b.income + outflow === 0;
+              const net = b.income + b.debtRecovery - outflow;
+              const isEmpty = b.income + b.debtRecovery + outflow === 0;
               const rate = b.income > 0 ? ((b.income - b.expense) / b.income) * 100 : null;
               return (
                 <tr key={b.label} className={isEmpty ? "opacity-40" : undefined}>
                   <td className="py-2 text-zinc-700 dark:text-zinc-300">{b.label}</td>
-                  <td className="py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                  <td className="py-2 text-right tabular-nums text-emerald-700 dark:text-emerald-400">
                     {formatCurrency(b.income)}
+                  </td>
+                  <td className="py-2 text-right tabular-nums text-teal-600 dark:text-teal-400">
+                    {b.debtRecovery > 0 ? formatCurrency(b.debtRecovery) : "—"}
                   </td>
                   <td className="py-2 text-right tabular-nums text-zinc-700 dark:text-zinc-300">
                     {formatCurrency(outflow)}
@@ -764,7 +796,6 @@ export function CategoryBreakdownGrid({
               items={card.items}
               title={card.title}
               color={card.color}
-              type={card.type}
               addLabel={card.addLabel}
               onSelect={setSelected}
               onAdd={() => setAddType(card.type)}
@@ -1021,7 +1052,7 @@ export function BreakdownSection({
       {activeView === "group" && !hasGroups ? (
         <p className="rounded-xl border border-dashed border-zinc-200 px-4 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
           You haven&apos;t grouped any categories yet.{" "}
-          <Link href="/categories" className="font-medium text-emerald-600 hover:underline dark:text-emerald-400">
+          <Link href="/categories" className="font-medium text-emerald-700 hover:underline dark:text-emerald-400">
             Create groups on the Categories page
           </Link>
           .

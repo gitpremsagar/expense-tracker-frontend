@@ -30,6 +30,7 @@ type AuthContextValue = {
     password: string;
   }) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -94,9 +95,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    await logoutRequest(accessToken);
-    setAccessToken(null);
-    setUser(null);
+    try {
+      await logoutRequest(accessToken);
+    } catch {
+      // Local state must clear even if the server is unreachable; otherwise a
+      // user can be trapped in a session they asked to leave.
+    } finally {
+      setAccessToken(null);
+      setUser(null);
+    }
+  }, [accessToken]);
+
+  const refreshUser = useCallback(async () => {
+    if (!accessToken) return;
+    const result = await getCurrentUser(accessToken);
+    setUser(result.user);
   }, [accessToken]);
 
   const value = useMemo(
@@ -107,8 +120,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       signup,
       logout,
+      refreshUser,
     }),
-    [user, accessToken, isLoading, login, signup, logout],
+    [user, accessToken, isLoading, login, signup, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

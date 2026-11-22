@@ -13,7 +13,7 @@ export function formatSigned(amount: number) {
 }
 
 export function signedColor(amount: number) {
-  return amount < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400";
+  return amount < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400";
 }
 
 export function percentOf(part: number, whole: number) {
@@ -82,6 +82,7 @@ export function MoneyFlowCard({
   saving,
   investment,
   debtRepayment,
+  debtRecovery = 0,
   subtitle = "How this month's income was used",
 }: {
   income: number;
@@ -89,14 +90,19 @@ export function MoneyFlowCard({
   saving: number;
   investment: number;
   debtRepayment: number;
+  debtRecovery?: number;
   subtitle?: string;
 }) {
+  const inflow = income + debtRecovery;
   const outflow = expense + saving + investment + debtRepayment;
-  const scale = Math.max(income, outflow);
-  const overspent = outflow - income;
+  const scale = Math.max(inflow, outflow);
+  const overspent = outflow - inflow;
 
   const legend = [
     { label: "Income", value: income, dot: "bg-emerald-500", pct: null },
+    ...(debtRecovery > 0
+      ? [{ label: "Debt received", value: debtRecovery, dot: "bg-teal-500", pct: null }]
+      : []),
     { label: "Expense", value: expense, dot: "bg-red-500", pct: percentOf(expense, income) },
     { label: "Savings", value: saving, dot: "bg-blue-500", pct: percentOf(saving, income) },
     { label: "Investments", value: investment, dot: "bg-purple-500", pct: percentOf(investment, income) },
@@ -111,13 +117,21 @@ export function MoneyFlowCard({
       <div className="space-y-4">
         <div>
           <div className="flex items-center justify-between text-sm mb-1.5">
-            <span className="font-medium text-zinc-700 dark:text-zinc-300">Income</span>
-            <span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-              {formatCurrency(income)}
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+              Money in
+              {debtRecovery > 0 && (
+                <span className="ml-1 text-xs font-normal text-zinc-500 dark:text-zinc-400">
+                  (income + debt received)
+                </span>
+              )}
+            </span>
+            <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+              {formatCurrency(inflow)}
             </span>
           </div>
           <div className="flex h-4 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
             <Bar value={income} scale={scale} className="bg-emerald-500" />
+            <Bar value={debtRecovery} scale={scale} className="bg-teal-500" />
             {overspent > 0 && (
               <Bar
                 value={overspent}
@@ -147,7 +161,7 @@ export function MoneyFlowCard({
         </div>
       </div>
 
-      <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {legend.map((item) => (
           <li key={item.label} className="rounded-xl bg-zinc-50 px-3 py-2 dark:bg-zinc-800/50">
             <div className="flex items-center gap-1.5">
@@ -157,7 +171,7 @@ export function MoneyFlowCard({
             <p className="mt-0.5 text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
               {formatCurrency(item.value)}
             </p>
-            {item.pct && <p className="text-xs text-zinc-400 dark:text-zinc-500">{item.pct} of income</p>}
+            {item.pct && <p className="text-xs text-zinc-500 dark:text-zinc-400">{item.pct} of income</p>}
           </li>
         ))}
       </ul>
@@ -184,7 +198,7 @@ export function DebtsCard({
           <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Debts</h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">{subtitle}</p>
         </div>
-        <Link href="/debts" className="text-sm text-emerald-600 dark:text-emerald-400 hover:underline">
+        <Link href="/debts" className="text-sm text-emerald-700 dark:text-emerald-400 hover:underline">
           All debts
         </Link>
       </div>
@@ -195,7 +209,7 @@ export function DebtsCard({
         </span>
         <span className="text-zinc-600 dark:text-zinc-400">
           Owed to you{" "}
-          <span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+          <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
             {formatCurrency(given)}
           </span>
         </span>

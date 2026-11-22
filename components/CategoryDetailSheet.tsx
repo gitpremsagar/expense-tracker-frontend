@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useFocusTrap } from "../lib/useFocusTrap";
 import { useAuth } from "../lib/auth-context";
 import {
   listTransactions,
@@ -37,7 +38,7 @@ function typeBadgeClass(type: CategoryType) {
 function typeAmountClass(type: CategoryType) {
   switch (type) {
     case "INCOME":
-      return "text-emerald-600 dark:text-emerald-400";
+      return "text-emerald-700 dark:text-emerald-400";
     case "EXPENSE":
       return "text-red-600 dark:text-red-400";
     case "SAVING":
@@ -124,6 +125,9 @@ export function CategoryDetailSheet({
   onClose: () => void;
 }) {
   const { accessToken } = useAuth();
+  const containerRef = useFocusTrap(true, onClose);
+  const periodKind = period.kind;
+  const periodValue = period.kind === "month" ? period.month : String(period.year);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -155,7 +159,9 @@ export function CategoryDetailSheet({
           {
             categoryId: item.id,
             type: item.type,
-            ...(period.kind === "month" ? { month: period.month } : { year: period.year }),
+            ...(periodKind === "month"
+              ? { month: periodValue }
+              : { year: Number(periodValue) }),
           },
           accessToken,
         );
@@ -172,7 +178,7 @@ export function CategoryDetailSheet({
     return () => {
       cancelled = true;
     };
-  }, [accessToken, item.id, item.type, period.kind, period.kind === "month" ? period.month : period.year]);
+  }, [accessToken, item.id, item.type, periodKind, periodValue]);
 
   const average = transactions.length > 0 ? item.total / transactions.length : 0;
   const sortedTransactions = useMemo(
@@ -198,9 +204,11 @@ export function CategoryDetailSheet({
         onClick={onClose}
       />
       <aside
+        ref={containerRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="category-sheet-title"
+        tabIndex={-1}
         className="relative flex h-full w-full max-w-md flex-col border-l border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
       >
         <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">

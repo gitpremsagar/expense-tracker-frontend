@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../../lib/auth-context";
 import {
+  addStarterCategories,
   listCategories,
   createCategory,
   updateCategory,
@@ -15,6 +16,8 @@ import {
   type CategoryGroup,
   type CategoryType,
 } from "../../../lib/api";
+import ConfirmDialog from "../../../components/ConfirmDialog";
+import { useToast } from "../../../components/ToastProvider";
 
 const TYPE_LABEL: Record<CategoryType, string> = {
   INCOME: "Income",
@@ -104,6 +107,7 @@ function Spinner({ light = false }: { light?: boolean }) {
 
 export default function CategoriesPage() {
   const { accessToken } = useAuth();
+  const { showToast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [activeType, setActiveType] = useState<CategoryType>("EXPENSE");
@@ -119,13 +123,16 @@ export default function CategoriesPage() {
   const [editName, setEditName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [isAddingStarters, setIsAddingStarters] = useState(false);
 
   const [newGroupName, setNewGroupName] = useState("");
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editGroupName, setEditGroupName] = useState("");
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
+  const [pendingDeleteGroupId, setPendingDeleteGroupId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!accessToken) return;
@@ -172,6 +179,25 @@ export default function CategoriesPage() {
       items: filtered.filter((c) => !c.groupId || !typeGroups.some((g) => g.id === c.groupId)),
     },
   ].filter((s) => s.id !== null || s.items.length > 0 || typeGroups.length === 0);
+
+  async function handleAddStarters() {
+    if (!accessToken) return;
+    setIsAddingStarters(true);
+    setActionError(null);
+    try {
+      const result = await addStarterCategories(accessToken);
+      await fetchData();
+      showToast(
+        result.created > 0
+          ? `Added ${result.created} starter categories`
+          : "You already have categories",
+      );
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to add starter categories");
+    } finally {
+      setIsAddingStarters(false);
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -223,13 +249,39 @@ export default function CategoriesPage() {
 
   async function handleDelete(id: string) {
     if (!accessToken) return;
+    const deleted = categories.find((category) => category.id === id);
     setDeletingId(id);
     setActionError(null);
     try {
       await deleteCategory(id, accessToken);
       setCategories((prev) => prev.filter((c) => c.id !== id));
+      setPendingDeleteId(null);
+      if (deleted) {
+        showToast(`"${deleted.name}" deleted`, {
+          action: {
+            label: "Undo",
+            onClick: async () => {
+              try {
+                await createCategory(
+                  { name: deleted.name, type: deleted.type, groupId: deleted.groupId },
+                  accessToken,
+                );
+                await fetchData();
+                showToast("Category restored");
+              } catch (error) {
+                setActionError(
+                  error instanceof Error ? error.message : "Could not restore category",
+                );
+              }
+            },
+          },
+        });
+      }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to delete category");
+      const message = err instanceof Error ? err.message : "Failed to delete category";
+      setPendingDeleteId(null);
+      setActionError(message);
+      showToast(message, { tone: "error" });
     } finally {
       setDeletingId(null);
     }
@@ -267,6 +319,8 @@ export default function CategoriesPage() {
 
   async function handleDeleteGroup(id: string) {
     if (!accessToken) return;
+    const deletedGroup = groups.find((group) => group.id === id);
+    const affectedCategories = categories.filter((category) => category.groupId === id);
     setDeletingGroupId(id);
     setActionError(null);
     try {
@@ -274,8 +328,38 @@ export default function CategoriesPage() {
       setGroups((prev) => prev.filter((g) => g.id !== id));
       setCategories((prev) => prev.map((c) => (c.groupId === id ? { ...c, groupId: null } : c)));
       if (newGroupId === id) setNewGroupId("");
+      setPendingDeleteGroupId(null);
+      if (deletedGroup) {
+        showToast(`Group "${deletedGroup.name}" deleted`, {
+          action: {
+            label: "Undo",
+            onClick: async () => {
+              try {
+                const restored = await createCategoryGroup(
+                  { name: deletedGroup.name, type: deletedGroup.type },
+                  accessToken,
+                );
+                await Promise.all(
+                  affectedCategories.map((category) =>
+                    updateCategory(category.id, { groupId: restored.id }, accessToken),
+                  ),
+                );
+                await fetchData();
+                showToast("Group restored");
+              } catch (error) {
+                setActionError(
+                  error instanceof Error ? error.message : "Could not restore group",
+                );
+              }
+            },
+          },
+        });
+      }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to delete group");
+      const message = err instanceof Error ? err.message : "Failed to delete group";
+      setPendingDeleteGroupId(null);
+      setActionError(message);
+      showToast(message, { tone: "error" });
     } finally {
       setDeletingGroupId(null);
     }
@@ -305,7 +389,7 @@ export default function CategoriesPage() {
               type="button"
               onClick={() => void handleUpdate(cat.id)}
               disabled={isSaving}
-              className="text-sm font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 disabled:opacity-60"
+              className="text-sm font-medium text-emerald-700 hover:text-emerald-700 dark:text-emerald-400 disabled:opacity-60"
             >
               Save
             </button>
@@ -352,10 +436,11 @@ export default function CategoriesPage() {
             </button>
             <button
               type="button"
-              onClick={() => void handleDelete(cat.id)}
+              onClick={() => setPendingDeleteId(cat.id)}
               disabled={deletingId === cat.id}
-              className="text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-40"
+              className="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-40"
               title="Delete"
+              aria-label={`Delete ${cat.name}`}
             >
               {deletingId === cat.id ? <Spinner /> : <TrashIcon />}
             </button>
@@ -438,7 +523,7 @@ export default function CategoriesPage() {
                       <button
                         type="button"
                         onClick={() => void handleUpdateGroup(g.id)}
-                        className="text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                        className="text-xs font-medium text-emerald-700 dark:text-emerald-400"
                       >
                         Save
                       </button>
@@ -460,10 +545,11 @@ export default function CategoriesPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => void handleDeleteGroup(g.id)}
+                        onClick={() => setPendingDeleteGroupId(g.id)}
                         disabled={deletingGroupId === g.id}
-                        className="text-zinc-400 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40"
+                        className="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40"
                         title="Delete group (categories are kept)"
+                        aria-label={`Delete ${g.name} group`}
                       >
                         {deletingGroupId === g.id ? <Spinner /> : <TrashIcon />}
                       </button>
@@ -506,7 +592,7 @@ export default function CategoriesPage() {
         <button
           type="submit"
           disabled={isCreating || !newName.trim()}
-          className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60"
+          className="flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-800 disabled:opacity-60"
         >
           {isCreating ? <Spinner light /> : <PlusIcon />}
           Add
@@ -526,10 +612,21 @@ export default function CategoriesPage() {
       ) : error ? (
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : filtered.length === 0 ? (
-        <div className="rounded-xl border-2 border-dashed border-zinc-200 dark:border-zinc-800 p-8 text-center">
+        <div className="rounded-xl border-2 border-dashed border-zinc-200 p-8 text-center dark:border-zinc-800">
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            No {activeType.toLowerCase()} categories yet. Add one above.
+            No {activeType.toLowerCase()} categories yet. Add one above
+            {categories.length === 0 ? ", or start with a ready-made set." : "."}
           </p>
+          {categories.length === 0 && (
+            <button
+              type="button"
+              onClick={() => void handleAddStarters()}
+              disabled={isAddingStarters}
+              className="mt-3 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-60"
+            >
+              {isAddingStarters ? "Adding..." : "Add starter categories"}
+            </button>
+          )}
         </div>
       ) : typeGroups.length === 0 ? (
         <ul className="space-y-2">{filtered.map(renderCategoryRow)}</ul>
@@ -554,6 +651,34 @@ export default function CategoriesPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="Delete category?"
+        message={`"${categories.find((category) => category.id === pendingDeleteId)?.name ?? "This category"}" will be removed. You can undo for a few seconds. Categories with transactions cannot be deleted.`}
+        confirmLabel="Delete"
+        isConfirming={deletingId !== null}
+        onConfirm={() => {
+          if (pendingDeleteId) void handleDelete(pendingDeleteId);
+        }}
+        onCancel={() => {
+          if (deletingId === null) setPendingDeleteId(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteGroupId !== null}
+        title="Delete group?"
+        message={`The group "${groups.find((group) => group.id === pendingDeleteGroupId)?.name ?? ""}" will be removed. Its categories stay, but become ungrouped. You can undo for a few seconds.`}
+        confirmLabel="Delete group"
+        isConfirming={deletingGroupId !== null}
+        onConfirm={() => {
+          if (pendingDeleteGroupId) void handleDeleteGroup(pendingDeleteGroupId);
+        }}
+        onCancel={() => {
+          if (deletingGroupId === null) setPendingDeleteGroupId(null);
+        }}
+      />
     </div>
   );
 }

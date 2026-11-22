@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useFocusTrap } from "../lib/useFocusTrap";
 import TransactionForm from "./TransactionForm";
 import type { ReportPeriod } from "./CategoryDetailSheet";
 import type { CategoryType } from "../lib/api";
@@ -34,6 +35,8 @@ export function AddTransactionSheet({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const containerRef = useFocusTrap(true, onClose);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
@@ -56,9 +59,11 @@ export function AddTransactionSheet({
         onClick={onClose}
       />
       <aside
+        ref={containerRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-transaction-title"
+        tabIndex={-1}
         className="relative flex h-full w-full max-w-md flex-col border-l border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
       >
         <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">

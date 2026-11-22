@@ -36,7 +36,7 @@ function typeBadgeClass(type: CategoryType) {
 function typeAmountClass(type: CategoryType) {
   switch (type) {
     case "INCOME":
-      return "text-emerald-600 dark:text-emerald-400";
+      return "text-emerald-700 dark:text-emerald-400";
     case "EXPENSE":
       return "text-red-600 dark:text-red-400";
     case "SAVING":
@@ -170,7 +170,7 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ id
             <div className="flex gap-3 pt-2">
               <Link
                 href={`/transactions/${transaction.id}/edit`}
-                className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-center text-sm font-medium text-white transition hover:bg-emerald-700"
+                className="flex-1 rounded-lg bg-emerald-700 py-2.5 text-center text-sm font-medium text-white transition hover:bg-emerald-800"
               >
                 Edit
               </Link>

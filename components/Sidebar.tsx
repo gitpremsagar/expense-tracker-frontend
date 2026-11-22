@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "../lib/auth-context";
+import { LogoMark } from "./Logo";
 
 const navItems = [
   {
@@ -20,6 +21,15 @@ const navItems = [
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+      </svg>
+    ),
+  },
+  {
+    href: "/budgets",
+    label: "Budgets",
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 100-18 9 9 0 000 18zm0-14v5l3 2" />
       </svg>
     ),
   },
@@ -52,6 +62,10 @@ const navItems = [
   },
 ];
 
+function isItemActive(pathname: string, href: string) {
+  return pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
@@ -65,18 +79,16 @@ export function Sidebar() {
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800">
       <div className="flex flex-col flex-1 min-h-0 pt-6 pb-4 px-4">
-        <div className="flex items-center gap-2 px-2 mb-8">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500 text-white">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <span className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Expense Tracker</span>
-        </div>
+        <Link href="/dashboard" className="flex items-center gap-2 px-2 mb-8" aria-label="Money Tracker 365 dashboard">
+          <LogoMark className="h-8 w-8" />
+          <span className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+            Money Tracker <span className="text-emerald-700 dark:text-emerald-400">365</span>
+          </span>
+        </Link>
 
         <nav className="flex-1 space-y-1">
           {navItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+            const isActive = isItemActive(pathname, item.href);
             return (
               <Link
                 key={item.href}
@@ -95,7 +107,21 @@ export function Sidebar() {
         </nav>
 
         <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
-          <div className="px-3 py-2 mb-2">
+          <Link
+            href="/settings"
+            className={`mb-1 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+              isItemActive(pathname, "/settings")
+                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
+                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
+            }`}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Settings
+          </Link>
+          <div className="px-3 py-2 mb-1">
             <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50 truncate">{user?.name}</p>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{user?.email}</p>
           </div>
@@ -120,21 +146,21 @@ export function BottomNav() {
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800">
-      <div className="grid grid-cols-5">
+      <div className="grid grid-cols-6">
         {navItems.map((item) => {
-          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const isActive = isItemActive(pathname, item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+              className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors ${
                 isActive
-                  ? "text-emerald-600 dark:text-emerald-400"
+                  ? "text-emerald-700 dark:text-emerald-400"
                   : "text-zinc-500 dark:text-zinc-400"
               }`}
             >
               {item.icon}
-              <span>{item.label}</span>
+              <span className="max-w-full truncate">{item.label}</span>
             </Link>
           );
         })}

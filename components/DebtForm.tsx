@@ -8,10 +8,10 @@ import {
   deleteDebt,
   type Debt,
   type DebtType,
-  type DebtStatus,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import ConfirmDialog from "./ConfirmDialog";
+import { useToast } from "./ToastProvider";
 
 function toLocalDatetimeValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -21,11 +21,6 @@ function toLocalDatetimeValue(date: Date): string {
 const TYPE_LABEL: Record<DebtType, string> = {
   TAKEN: "Debt Taken",
   GIVEN: "Debt Given",
-};
-
-const STATUS_LABEL: Record<DebtStatus, string> = {
-  ACTIVE: "Active",
-  SETTLED: "Settled",
 };
 
 type Props = {
@@ -44,6 +39,7 @@ export default function DebtForm({
   onCancel,
 }: Props) {
   const { accessToken } = useAuth();
+  const { showToast } = useToast();
   const router = useRouter();
 
   const [type, setType] = useState<DebtType>(debt?.type ?? defaultType ?? "TAKEN");
@@ -55,7 +51,6 @@ export default function DebtForm({
       ? toLocalDatetimeValue(new Date(debt.date))
       : toLocalDatetimeValue(defaultDate ?? new Date()),
   );
-  const [status, setStatus] = useState<DebtStatus>(debt?.status ?? "ACTIVE");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -91,7 +86,6 @@ export default function DebtForm({
             amount: parsedAmount,
             description: description.trim() || null,
             date: isoDate,
-            status,
           },
           accessToken,
         );
@@ -107,6 +101,7 @@ export default function DebtForm({
           accessToken,
         );
       }
+      showToast(debt ? "Debt updated" : "Debt added");
       if (onSuccess) {
         onSuccess();
       } else {
@@ -126,6 +121,7 @@ export default function DebtForm({
     setError(null);
     try {
       await deleteDebt(debt.id, accessToken);
+      showToast("Debt deleted");
       router.push("/debts");
       router.refresh();
     } catch (err) {
@@ -217,28 +213,6 @@ export default function DebtForm({
         />
       </div>
 
-      {/* Status (only show for edit) */}
-      {debt && (
-        <div>
-          <label htmlFor="status" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-            Status
-          </label>
-          <select
-            id="status"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as DebtStatus)}
-            required
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none ring-emerald-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-          >
-            {(["ACTIVE", "SETTLED"] as DebtStatus[]).map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABEL[s]}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
       {/* Description */}
       <div>
         <label htmlFor="description" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
@@ -268,7 +242,7 @@ export default function DebtForm({
         <button
           type="submit"
           disabled={isSubmitting || isDeleting}
-          className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60"
+          className="flex-1 rounded-lg bg-emerald-700 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-60"
         >
           {isSubmitting ? "Saving…" : debt ? "Update" : "Add Debt"}
         </button>
