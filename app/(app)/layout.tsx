@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../lib/auth-context";
 import { Sidebar, BottomNav } from "../../components/Sidebar";
+import { AssistantFab } from "../../components/AssistantFab";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -34,6 +35,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <main className="min-h-screen pb-20 md:pb-0 [&>*]:mx-auto">{children}</main>
       </div>
       <BottomNav />
+      <AssistantFab />
     </div>
   );
 }

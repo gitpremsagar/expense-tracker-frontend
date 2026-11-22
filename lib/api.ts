@@ -1,5 +1,8 @@
-// const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3710";
-const API_URL = process.env.NODE_ENV === "development" ? "http://localhost:3710" : "https://api.moneytracker365.com";
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "development"
+    ? "http://localhost:3710"
+    : "https://api.moneytracker365.com");
 
 
 export type AuthUser = {
@@ -99,6 +102,44 @@ export async function apiFetch<T>(
       data && typeof data === "object" && "message" in data
         ? String(data.message)
         : "Request failed";
+    throw new Error(message);
+  }
+
+  return data as T;
+}
+
+/** Multipart upload with the same auth/refresh behaviour as apiFetch. */
+export async function apiUpload<T>(
+  path: string,
+  form: FormData,
+  accessToken?: string | null,
+  skipAuthRetry = false,
+): Promise<T> {
+  const token = accessToken ?? accessTokenGetter?.() ?? null;
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    body: form,
+    headers,
+    credentials: "include",
+  });
+
+  if (response.status === 401 && token && !skipAuthRetry) {
+    const newAccessToken = await refreshAccessToken();
+    if (newAccessToken) {
+      return apiUpload<T>(path, form, newAccessToken, true);
+    }
+  }
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const message =
+      data && typeof data === "object" && "message" in data
+        ? String(data.message)
+        : "Upload failed";
     throw new Error(message);
   }
 
