@@ -31,6 +31,7 @@ import {
 } from "../../lib/assistant";
 import { ProposalCard } from "./ProposalCard";
 import { OperationCard } from "./OperationCard";
+import { EntityActionCard, EntityQueryCard } from "./EntityActionCard";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { StatementImportModal } from "./StatementImportModal";
 import ConfirmDialog from "../ConfirmDialog";
@@ -40,7 +41,9 @@ const SUGGESTIONS = [
   "Spent 450 on groceries at BigBasket yesterday",
   "Got salary 85,000 today",
   "How much did I spend on food this month?",
-  "Delete the 1,200 BigBasket entry",
+  "I borrowed 25,000 from Ramesh today",
+  "Rename my Food category to Dining",
+  "How much do I owe Ramesh?",
 ];
 
 const EFFORT_LABEL: Record<"low" | "high" | "max", string> = {
@@ -196,9 +199,13 @@ function MessageBubble({
 
   const savedProposals = new Set(turn?.savedProposalIds ?? []);
   const savedOperations = new Set(turn?.savedOperationIds ?? []);
+  const savedActions = new Set(turn?.savedActionIds ?? []);
   const proposals = turn?.proposals.filter((proposal) => !savedProposals.has(proposal.proposalId)) ?? [];
   const operations = turn?.operations.filter((operation) => !savedOperations.has(operation.operationId)) ?? [];
+  const entityActions =
+    turn?.entityActions?.filter((action) => !savedActions.has(action.actionId)) ?? [];
   const queryResult = turn?.queryResult ?? null;
+  const entityQueryResult = turn?.entityQueryResult ?? null;
 
   return (
     <div className="flex justify-start">
@@ -243,7 +250,19 @@ function MessageBubble({
           />
         ))}
 
+        {entityActions.map((action) => (
+          <EntityActionCard
+            key={action.actionId}
+            action={action}
+            saved={false}
+            disabled={disabled}
+            onConfirm={(item) => onConfirm([item], message.id)}
+          />
+        ))}
+
         {queryResult && <QueryCard result={queryResult} />}
+
+        {entityQueryResult && <EntityQueryCard result={entityQueryResult} />}
 
         <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{formatDateTime(message.createdAt)}</p>
       </div>
@@ -519,7 +538,13 @@ export function AssistantPanel() {
       accessToken,
     );
 
-    const count = result.created + result.updated + result.deleted;
+    const count =
+      result.created +
+      result.updated +
+      result.deleted +
+      result.entityCreated +
+      result.entityUpdated +
+      result.entityDeleted;
     showToast(`${count} change${count === 1 ? "" : "s"} saved.`, {
       tone: "success",
       durationMs: 10_000,
@@ -528,6 +553,9 @@ export function AssistantPanel() {
         onClick: () => void handleUndo(result.batchId),
       },
     });
+    if (accessToken) {
+      setCategories(await listCategories(accessToken));
+    }
     await refreshActiveThread();
     router.refresh();
   }
@@ -656,7 +684,8 @@ export function AssistantPanel() {
             <span className="text-emerald-700 dark:text-emerald-400">✦</span> Assistant
           </h1>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Add, edit, delete or ask about transactions. Nothing is saved without confirmation.
+            Add, edit, delete or ask about transactions, debts, categories and groups. Nothing is
+            saved without confirmation.
           </p>
         </div>
 
@@ -911,7 +940,7 @@ export function AssistantPanel() {
           disabled={disabled}
           placeholder={
             status?.enabled
-              ? "e.g. Spent 250 on lunch today, or ask how much you spent on food this month"
+              ? "e.g. Spent 250 on lunch today, or I lent 5,000 to Priya, or rename my Food category"
               : "Assistant unavailable"
           }
           className="w-full resize-none bg-transparent px-2 py-1.5 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 disabled:opacity-60 dark:text-zinc-50"

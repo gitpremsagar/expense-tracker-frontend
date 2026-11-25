@@ -6,8 +6,62 @@ export type AssistantIntent =
   | "DELETE"
   | "QUERY"
   | "IMPORT"
+  | "MANAGE"
   | "CLARIFY"
   | "UNSUPPORTED";
+
+export type EntityKind = "DEBT" | "CATEGORY" | "GROUP";
+export type DebtDirection = "TAKEN" | "GIVEN";
+
+export type EntitySnapshot = {
+  entity: EntityKind;
+  id: string;
+  type?: DebtDirection | CategoryType;
+  partyName?: string;
+  amount?: number;
+  description?: string | null;
+  date?: string;
+  status?: string;
+  paidAmount?: number;
+  outstanding?: number;
+  paymentCount?: number;
+  name?: string;
+  groupId?: string | null;
+  groupName?: string | null;
+  transactionCount?: number;
+  categoryCount?: number;
+  memberIds?: string[];
+};
+
+export type EntityChanges = {
+  type?: DebtDirection | CategoryType;
+  partyName?: string;
+  amount?: number;
+  description?: string | null;
+  date?: string;
+  name?: string;
+  groupId?: string | null;
+};
+
+export type AssistantEntityAction = {
+  actionId: string;
+  entity: EntityKind;
+  kind: "CREATE" | "UPDATE" | "DELETE";
+  targetId: string | null;
+  before: EntitySnapshot | null;
+  after: EntitySnapshot | null;
+  changes: EntityChanges;
+  confidence: number;
+};
+
+export type EntityQueryResult = {
+  entity: EntityKind;
+  count: number;
+  total: number;
+  takenOutstanding?: number;
+  givenOutstanding?: number;
+  items: Array<{ id: string; title: string; subtitle: string; amount?: number }>;
+};
 
 export type AssistantProposal = {
   proposalId: string;
@@ -67,11 +121,15 @@ export type AssistantTurn = {
   reply: string;
   proposals: AssistantProposal[];
   operations: AssistantOperation[];
+  entityActions: AssistantEntityAction[];
   query: Record<string, unknown> | null;
   queryResult: QueryResult | null;
+  entityQuery: Record<string, unknown> | null;
+  entityQueryResult: EntityQueryResult | null;
   clarifications: string[];
   savedProposalIds?: string[];
   savedOperationIds?: string[];
+  savedActionIds?: string[];
   savedBatchId?: string;
 };
 
@@ -173,14 +231,7 @@ export type AssistantTurnResponse = {
   messageId: string;
   turn: AssistantTurn;
   reasoning: string | null;
-  autoSaved: {
-    batchId: string;
-    created: number;
-    updated: number;
-    deleted: number;
-    transactions: TransactionSnapshot[];
-    undoUntil: string;
-  } | null;
+  autoSaved: ConfirmResult | null;
   autoSaveError: string | null;
 };
 
@@ -317,7 +368,34 @@ export type ConfirmItem =
       };
       operationId?: string;
     }
-  | { kind: "DELETE"; targetId: string; operationId?: string };
+  | { kind: "DELETE"; targetId: string; operationId?: string }
+  | {
+      kind: "ENTITY";
+      entity: EntityKind;
+      action: "CREATE" | "UPDATE" | "DELETE";
+      targetId?: string;
+      partyName?: string;
+      amount?: number;
+      description?: string | null;
+      type?: DebtDirection | CategoryType;
+      name?: string;
+      groupId?: string | null;
+      date?: string;
+      actionId?: string;
+    };
+
+export type ConfirmResult = {
+  batchId: string;
+  created: number;
+  updated: number;
+  deleted: number;
+  transactions: TransactionSnapshot[];
+  entityCreated: number;
+  entityUpdated: number;
+  entityDeleted: number;
+  entities: EntitySnapshot[];
+  undoUntil: string;
+};
 
 export async function confirmAssistantActions(
   input: {
@@ -328,14 +406,7 @@ export async function confirmAssistantActions(
     items: ConfirmItem[];
   },
   accessToken: string,
-): Promise<{
-  batchId: string;
-  created: number;
-  updated: number;
-  deleted: number;
-  transactions: TransactionSnapshot[];
-  undoUntil: string;
-}> {
+): Promise<ConfirmResult> {
   return apiFetch("/assistant/actions/confirm", {
     method: "POST",
     body: JSON.stringify(input),
